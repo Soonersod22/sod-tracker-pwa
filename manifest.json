@@ -1,6 +1,8 @@
 {
   "name": "Sod Job Tracker",
   "short_name": "Sod Tracker",
+  "lang": "en-US",
+  "dir": "ltr",
   "description": "Track sod install jobs and trucking load drops",
   "start_url": "./index.html",
   "scope": "./",
