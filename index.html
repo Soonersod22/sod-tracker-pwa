@@ -123,6 +123,15 @@
   .pill.soil{background:#F1E7DA; color:var(--soil);}
   .pill.photos{background:#EFEAE0; color:var(--ink-soft);}
   .job-card .date{font-size:12px; color:var(--ink-soft); margin-top:8px;}
+  .job-card.completed{opacity:0.82;}
+
+  .subtabs{display:flex; gap:6px; margin-bottom:14px;}
+  .subtab-btn{
+    flex:1; border:1.5px solid var(--line); background:var(--card); padding:9px 8px; border-radius:10px;
+    font-size:13.5px; font-weight:650; color:var(--ink-soft); cursor:pointer; font-family:inherit;
+  }
+  .subtab-btn.active{background:var(--turf); color:#fff; border-color:var(--turf);}
+  .pill.done{background:var(--turf); color:#fff;}
 
   .empty{text-align:center; padding:50px 20px; color:var(--ink-soft);}
   .empty .icon{font-size:34px; margin-bottom:10px;}
@@ -270,6 +279,10 @@
       <div class="fab-row">
         <button class="btn btn-primary" id="btn-new-job">+ New Job</button>
         <button class="btn btn-ghost" id="btn-export-jobs" title="Export to CSV">⬇ CSV</button>
+      </div>
+      <div class="subtabs">
+        <button class="subtab-btn active" data-jobfilter="open" id="subtab-open">Open</button>
+        <button class="subtab-btn" data-jobfilter="completed" id="subtab-completed">Completed</button>
       </div>
       <div class="search-wrap">
         <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="11" cy="11" r="7"/><line x1="21" y1="21" x2="16.65" y2="16.65"/></svg>
@@ -439,6 +452,10 @@
 
   function uid(prefix){ return prefix + "_" + Date.now().toString(36) + Math.random().toString(36).slice(2,7); }
   function escapeHtml(s){ return (s||"").replace(/[&<>"']/g, c => ({"&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;","'":"&#39;"}[c])); }
+  // Normalize an address for duplicate detection: trim, lowercase, collapse inner spaces.
+  function normAddr(a){ return (a||"").trim().toLowerCase().replace(/\s+/g, " "); }
+  // A job counts as "open" unless it has been explicitly marked completed.
+  function isCompleted(j){ return j && j.status === "completed"; }
   function csvCell(v){
     const s = String(v == null ? "" : v);
     return /[",\n]/.test(s) ? '"' + s.replace(/"/g,'""') + '"' : s;
@@ -470,6 +487,16 @@
   let jobsCache = [];
   let pendingPhotos = []; // {id, url, storagePath, uploading}
   let editingJobId = null;
+  let currentJobFilter = "open"; // "open" | "completed"
+
+  // Open / Completed sub-tabs on the Jobs screen
+  document.querySelectorAll(".subtab-btn").forEach(btn => {
+    btn.addEventListener("click", () => {
+      currentJobFilter = btn.dataset.jobfilter;
+      document.querySelectorAll(".subtab-btn").forEach(b => b.classList.toggle("active", b === btn));
+      renderJobList();
+    });
+  });
 
   const jobListEl = document.getElementById("job-list");
   const jobSheet = document.getElementById("job-sheet");
@@ -573,10 +600,21 @@
   document.getElementById("btn-save-job").addEventListener("click", async () => {
     const address = document.getElementById("f-address").value.trim();
     if (!address){ document.getElementById("f-address").focus(); return; }
+
+    const jobId = editingJobId || uid("job");
+
+    // Prevent a duplicate OPEN job at the same address. Completed jobs don't
+    // block reuse, so an address frees up once its job is marked complete.
+    const dupe = jobsCache.find(j => j.id !== jobId && !isCompleted(j) && normAddr(j.address) === normAddr(address));
+    if (dupe){
+      alert("That address already has an open job:\n\n“" + dupe.address + "”\n\nMark that job complete first, or open it to edit.");
+      document.getElementById("f-address").focus();
+      return;
+    }
+
     const saveBtn = document.getElementById("btn-save-job");
     saveBtn.disabled = true; saveBtn.textContent = "Saving…";
 
-    const jobId = editingJobId || uid("job");
     const existing = jobsCache.find(j => j.id === jobId);
     const job = {
       id: jobId,
@@ -587,6 +625,8 @@
       mapsLink: document.getElementById("f-maps").value.trim(),
       notes: document.getElementById("f-notes").value.trim(),
       photos: pendingPhotos.filter(p => !p.uploading),
+      status: existing && existing.status ? existing.status : "open",
+      completedAt: existing && existing.completedAt ? existing.completedAt : null,
       createdAt: existing ? existing.createdAt : Date.now(),
       updatedAt: Date.now()
     };
@@ -633,19 +673,31 @@
   }
 
   function renderJobList(){
+    // Keep the Open / Completed sub-tab counts current.
+    const openCount = jobsCache.filter(j => !isCompleted(j)).length;
+    const completedCount = jobsCache.filter(isCompleted).length;
+    document.getElementById("subtab-open").textContent = "Open" + (openCount ? " (" + openCount + ")" : "");
+    document.getElementById("subtab-completed").textContent = "Completed" + (completedCount ? " (" + completedCount + ")" : "");
+
     const q = (document.getElementById("job-search").value || "").toLowerCase().trim();
-    const filtered = jobsCache.filter(j => !q || (j.address||"").toLowerCase().includes(q) || (j.lot||"").toLowerCase().includes(q));
+    const showCompleted = currentJobFilter === "completed";
+    let list = jobsCache.filter(j => isCompleted(j) === showCompleted);
+    // Completed jobs read best newest-finished-first.
+    if (showCompleted) list = list.slice().sort((a,b) => (b.completedAt||b.createdAt||0) - (a.completedAt||a.createdAt||0));
+    const filtered = list.filter(j => !q || (j.address||"").toLowerCase().includes(q) || (j.lot||"").toLowerCase().includes(q));
+
     if (filtered.length === 0){
-      jobListEl.innerHTML = `
-        <div class="empty">
-          <div class="icon">🌱</div>
-          <h3>${jobsCache.length === 0 ? "No jobs yet" : "No matches"}</h3>
-          <p>${jobsCache.length === 0 ? "Tap “+ New Job” to create your first job folder." : "Try a different search."}</p>
-        </div>`;
+      const noneYet = list.length === 0;
+      const icon = showCompleted ? "✅" : "🌱";
+      const h3 = noneYet ? (showCompleted ? "No completed jobs yet" : "No open jobs") : "No matches";
+      const p  = noneYet
+        ? (showCompleted ? "Jobs you mark complete will move here." : "Tap “+ New Job” to create your first job folder.")
+        : "Try a different search.";
+      jobListEl.innerHTML = `<div class="empty"><div class="icon">${icon}</div><h3>${h3}</h3><p>${p}</p></div>`;
       return;
     }
     jobListEl.innerHTML = filtered.map(j => `
-      <div class="job-card" data-id="${j.id}">
+      <div class="job-card${isCompleted(j) ? " completed" : ""}" data-id="${j.id}">
         <div class="row1">
           <div>
             <div class="addr">${escapeHtml(j.address)}</div>
@@ -656,8 +708,11 @@
           <span class="pill">${j.bigRolls || 0} rolls</span>
           <span class="pill soil">${j.pallets || 0} pallets</span>
           ${j.photos && j.photos.length ? `<span class="pill photos">📷 ${j.photos.length}</span>` : ""}
+          ${isCompleted(j) ? `<span class="pill done">✓ Completed</span>` : ""}
         </div>
-        <div class="date">${new Date(j.createdAt).toLocaleDateString(undefined,{month:'short',day:'numeric',year:'numeric'})}</div>
+        <div class="date">${isCompleted(j) && j.completedAt
+          ? "Completed " + new Date(j.completedAt).toLocaleDateString(undefined,{month:'short',day:'numeric',year:'numeric'})
+          : new Date(j.createdAt).toLocaleDateString(undefined,{month:'short',day:'numeric',year:'numeric'})}</div>
       </div>
     `).join("");
     jobListEl.querySelectorAll(".job-card").forEach(card => {
@@ -670,10 +725,12 @@
   document.getElementById("job-search").addEventListener("input", renderJobList);
 
   document.getElementById("btn-export-jobs").addEventListener("click", () => {
-    const rows = [["Address","Lot #","Big Rolls","Pallets","Maps Link","Notes","Photo Count","Created"]];
+    const rows = [["Address","Lot #","Big Rolls","Pallets","Maps Link","Notes","Photo Count","Status","Created","Completed"]];
     jobsCache.forEach(j => rows.push([
       j.address, j.lot||"", j.bigRolls||0, j.pallets||0, j.mapsLink||"", j.notes||"",
-      (j.photos||[]).length, new Date(j.createdAt).toLocaleDateString()
+      (j.photos||[]).length, isCompleted(j) ? "Completed" : "Open",
+      new Date(j.createdAt).toLocaleDateString(),
+      j.completedAt ? new Date(j.completedAt).toLocaleDateString() : ""
     ]));
     downloadCsv("sod-install-jobs.csv", rows);
   });
@@ -690,6 +747,7 @@
       <div class="detail-hero">
         <div class="addr">${escapeHtml(job.address)}</div>
         ${job.lot ? `<div class="lot">Lot ${escapeHtml(job.lot)}</div>` : ""}
+        ${isCompleted(job) ? `<div class="lot" style="color:var(--turf); font-weight:700;">✓ Completed${job.completedAt ? " · " + new Date(job.completedAt).toLocaleDateString(undefined,{month:'short',day:'numeric',year:'numeric'}) : ""}</div>` : ""}
       </div>
       <div class="stat-grid">
         <div class="stat-box"><div class="num">${job.bigRolls || 0}</div><div class="lbl">Big Rolls</div></div>
@@ -704,7 +762,10 @@
       <div class="section-lbl">Photos (${(job.photos||[]).length})</div>
       ${job.photos && job.photos.length ? `
       <div class="detail-photo-grid">${job.photos.map(p => `<img src="${p.url}" data-src="${p.url}">`).join("")}</div>` : `<div class="hint">No photos added yet.</div>`}
-      <div class="action-row"><button class="btn btn-ghost" id="detail-edit-btn">Edit Job</button></div>
+      <div class="action-row">
+        <button class="btn btn-ghost" id="detail-edit-btn">Edit Job</button>
+        <button class="btn ${isCompleted(job) ? "btn-ghost" : "btn-primary"}" id="detail-complete-btn">${isCompleted(job) ? "Reopen Job" : "Mark Complete"}</button>
+      </div>
     `;
     body.querySelectorAll(".detail-photo-grid img").forEach(img => {
       img.addEventListener("click", () => {
@@ -713,8 +774,38 @@
       });
     });
     body.querySelector("#detail-edit-btn").addEventListener("click", () => { closeDetailSheet(); openJobSheet(job); });
+    body.querySelector("#detail-complete-btn").addEventListener("click", () => toggleJobComplete(job));
     detailSheetBackdrop.classList.add("show");
     detailSheet.classList.add("show");
+  }
+
+  // Mark a job complete (moves it to the Completed tab) or reopen it.
+  // NOTE: for now anyone can do this; once logins/roles are added this will
+  // be limited to managers.
+  async function toggleJobComplete(job){
+    const completing = !isCompleted(job);
+    if (!completing){
+      // Reopening: don't create a second open job at an address that's taken again.
+      const clash = jobsCache.find(j => j.id !== job.id && !isCompleted(j) && normAddr(j.address) === normAddr(job.address));
+      if (clash){ alert("Can't reopen — “" + clash.address + "” already has another open job. Complete or edit that one first."); return; }
+    }
+    const btn = document.getElementById("detail-complete-btn");
+    if (btn){ btn.disabled = true; btn.textContent = completing ? "Marking…" : "Reopening…"; }
+    try{
+      await db.collection("jobs").doc(job.id).update({
+        status: completing ? "completed" : "open",
+        completedAt: completing ? Date.now() : null,
+        updatedAt: Date.now()
+      });
+    }catch(err){
+      console.error(err);
+      if (btn){ btn.disabled = false; btn.textContent = completing ? "Mark Complete" : "Reopen Job"; }
+      alert("Couldn't update — check your connection and try again.");
+      return;
+    }
+    closeDetailSheet();
+    await loadJobs();
+    showToast(completing ? "Job marked complete" : "Job reopened");
   }
 
   document.getElementById("lb-close").addEventListener("click", () => document.getElementById("lightbox").classList.remove("show"));
