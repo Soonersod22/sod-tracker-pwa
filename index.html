@@ -1,0 +1,859 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, viewport-fit=cover">
+<title>Sod Job Tracker</title>
+
+<!-- PWA / install-to-home-screen -->
+<link rel="manifest" href="manifest.json">
+<meta name="theme-color" content="#2F5233">
+<meta name="mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-status-bar-style" content="default">
+<meta name="apple-mobile-web-app-title" content="Sod Tracker">
+<link rel="apple-touch-icon" href="icons/icon-192.png">
+<link rel="icon" href="icons/icon-192.png">
+
+<style>
+  :root{
+    --cream:#FAF7F1;
+    --card:#FFFFFF;
+    --line:#E4DECF;
+    --ink:#26312B;
+    --ink-soft:#6B7268;
+    --turf:#2F5233;
+    --turf-light:#DCE9DA;
+    --turf-accent:#6FA35A;
+    --soil:#8B6B4A;
+    --hauler:#33506B;
+    --hauler-light:#DDE6ED;
+    --hauler-accent:#5C86A6;
+    --warn:#B3542A;
+    --warn-light:#F6E3D6;
+    --radius:14px;
+    --shadow: 0 1px 2px rgba(38,49,43,0.06), 0 4px 14px rgba(38,49,43,0.06);
+  }
+  *{box-sizing:border-box;}
+  body{
+    margin:0;
+    font-family:-apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica, Arial, sans-serif;
+    background:var(--cream);
+    color:var(--ink);
+    -webkit-tap-highlight-color: transparent;
+    padding-top:env(safe-area-inset-top);
+    padding-bottom:env(safe-area-inset-bottom);
+  }
+  .app{max-width:720px; margin:0 auto; min-height:100vh; display:flex; flex-direction:column;}
+
+  /* ---------- Connection / install banners ---------- */
+  .banner{
+    display:none; align-items:center; justify-content:space-between; gap:10px;
+    padding:10px 16px; font-size:13px; font-weight:600;
+  }
+  .banner.show{display:flex;}
+  .banner-offline{background:var(--warn-light); color:var(--warn);}
+  .banner-install{background:var(--turf-light); color:var(--turf);}
+  .banner button{
+    border:none; background:var(--turf); color:#fff; padding:7px 12px; border-radius:8px;
+    font-size:12.5px; font-weight:700; cursor:pointer; flex-shrink:0;
+  }
+  .banner .dismiss{background:transparent; color:inherit; padding:6px; opacity:0.6;}
+
+  /* ---------- Header / Tabs ---------- */
+  header.top{padding:20px 18px 0 18px;}
+  .brand{display:flex; align-items:baseline; gap:8px; margin-bottom:16px;}
+  .brand .mark{
+    width:30px; height:30px; border-radius:8px;
+    background: linear-gradient(135deg, var(--turf), var(--turf-accent));
+    display:inline-flex; align-items:center; justify-content:center;
+    color:white; font-weight:800; font-size:15px; flex-shrink:0;
+  }
+  .brand h1{font-size:19px; margin:0; font-weight:700; letter-spacing:-0.01em;}
+  .sync-dot{width:7px; height:7px; border-radius:50%; background:var(--turf-accent); margin-left:auto;}
+  .sync-dot.offline{background:var(--warn);}
+  .tabs{display:flex; gap:6px; background:#EFEAE0; padding:4px; border-radius:12px; margin-bottom:6px;}
+  .tab-btn{
+    flex:1; border:none; background:transparent; padding:11px 8px; border-radius:9px;
+    font-size:14.5px; font-weight:600; color:var(--ink-soft); cursor:pointer;
+    display:flex; align-items:center; justify-content:center; gap:6px; transition: background .15s, color .15s;
+  }
+  .tab-btn.active{background:var(--card); color:var(--ink); box-shadow:var(--shadow);}
+  .tab-btn .dot{width:7px;height:7px;border-radius:50%;}
+  .tab-btn[data-tab="install"] .dot{background:var(--turf-accent);}
+  .tab-btn[data-tab="drops"] .dot{background:var(--hauler-accent);}
+
+  main{flex:1; padding:16px 16px 90px 16px;}
+  .view{display:none;}
+  .view.active{display:block;}
+
+  .btn{
+    border:none; border-radius:11px; padding:13px 18px; font-size:15px; font-weight:650;
+    cursor:pointer; display:inline-flex; align-items:center; justify-content:center; gap:7px; font-family:inherit;
+  }
+  .btn-primary{background:var(--turf); color:#fff;}
+  .btn-primary:active{background:#25401F;}
+  .btn-primary:disabled{opacity:0.55;}
+  .btn-hauler{background:var(--hauler); color:#fff;}
+  .btn-hauler:active{background:#26405A;}
+  .btn-hauler:disabled{opacity:0.55;}
+  .btn-ghost{background:transparent; color:var(--ink-soft); border:1.5px solid var(--line);}
+  .btn-danger{background:transparent; color:var(--warn); border:1.5px solid var(--warn-light);}
+  .btn-block{width:100%;}
+
+  .fab-row{margin-bottom:16px; display:flex; gap:8px;}
+  .fab-row .btn-primary{flex:1;}
+
+  .search-wrap{position:relative; margin-bottom:14px;}
+  .search-wrap input{
+    width:100%; padding:12px 14px 12px 38px; border-radius:11px; border:1.5px solid var(--line);
+    font-size:15px; background:var(--card); font-family:inherit;
+  }
+  .search-wrap svg{position:absolute; left:12px; top:50%; transform:translateY(-50%); opacity:0.4;}
+
+  .job-card{
+    background:var(--card); border-radius:var(--radius); box-shadow:var(--shadow);
+    padding:14px 16px; margin-bottom:10px; cursor:pointer; border:1px solid var(--line);
+  }
+  .job-card .row1{display:flex; justify-content:space-between; align-items:flex-start; gap:10px;}
+  .job-card .addr{font-weight:700; font-size:15.5px; line-height:1.3;}
+  .job-card .lot{color:var(--ink-soft); font-size:13px; margin-top:2px;}
+  .job-card .stats{display:flex; gap:8px; margin-top:10px; flex-wrap:wrap;}
+  .pill{font-size:12.5px; font-weight:650; padding:4px 10px; border-radius:20px; background:var(--turf-light); color:var(--turf);}
+  .pill.soil{background:#F1E7DA; color:var(--soil);}
+  .pill.photos{background:#EFEAE0; color:var(--ink-soft);}
+  .job-card .date{font-size:12px; color:var(--ink-soft); margin-top:8px;}
+
+  .empty{text-align:center; padding:50px 20px; color:var(--ink-soft);}
+  .empty .icon{font-size:34px; margin-bottom:10px;}
+  .empty h3{margin:0 0 6px 0; color:var(--ink); font-size:16px;}
+  .empty p{margin:0; font-size:14px; line-height:1.5;}
+
+  .sheet-backdrop{position:fixed; inset:0; background:rgba(38,49,43,0.35); z-index:40; display:none;}
+  .sheet-backdrop.show{display:block;}
+  .sheet{
+    position:fixed; left:0; right:0; bottom:0; z-index:41; background:var(--cream);
+    max-width:720px; margin:0 auto; border-radius:20px 20px 0 0; box-shadow:0 -6px 24px rgba(0,0,0,0.15);
+    max-height:92vh; overflow-y:auto; transform:translateY(100%); transition:transform .22s ease-out; padding-bottom:24px;
+  }
+  .sheet.show{transform:translateY(0);}
+  .sheet-header{
+    position:sticky; top:0; background:var(--cream); padding:16px 18px 10px 18px; z-index:2;
+    display:flex; justify-content:space-between; align-items:center; border-bottom:1px solid var(--line);
+  }
+  .sheet-header h2{margin:0; font-size:17px;}
+  .close-x{
+    width:30px; height:30px; border-radius:50%; border:none; background:#EFEAE0; color:var(--ink-soft);
+    font-size:16px; cursor:pointer; display:flex; align-items:center; justify-content:center;
+  }
+  .sheet-body{padding:16px 18px 4px 18px;}
+
+  .field{margin-bottom:16px;}
+  .field label{display:block; font-size:13px; font-weight:650; color:var(--ink-soft); margin-bottom:6px;}
+  .field input, .field textarea{
+    width:100%; padding:12px 13px; border-radius:10px; border:1.5px solid var(--line);
+    font-size:16px; font-family:inherit; background:var(--card); color:var(--ink);
+  }
+  .field textarea{resize:vertical; min-height:60px;}
+  .field-row{display:flex; gap:10px;}
+  .field-row .field{flex:1;}
+  .hint{font-size:12px; color:var(--ink-soft); margin-top:5px;}
+
+  .photo-grid{display:grid; grid-template-columns:repeat(3,1fr); gap:8px; margin-top:8px;}
+  .photo-thumb{position:relative; aspect-ratio:1; border-radius:10px; overflow:hidden; background:#EFEAE0;}
+  .photo-thumb img{width:100%; height:100%; object-fit:cover; display:block;}
+  .photo-thumb .rm{
+    position:absolute; top:4px; right:4px; width:22px; height:22px; border-radius:50%;
+    background:rgba(0,0,0,0.55); color:#fff; border:none; font-size:13px; cursor:pointer;
+    display:flex; align-items:center; justify-content:center;
+  }
+  .photo-thumb .uploading{
+    position:absolute; inset:0; background:rgba(255,255,255,0.75); display:flex; align-items:center; justify-content:center;
+  }
+  .add-photo-btn{
+    aspect-ratio:1; border-radius:10px; border:1.5px dashed var(--line); background:var(--card);
+    display:flex; flex-direction:column; align-items:center; justify-content:center; gap:4px;
+    color:var(--ink-soft); font-size:12px; font-weight:600; cursor:pointer;
+  }
+
+  .detail-hero{padding:2px 0 14px 0;}
+  .detail-hero .addr{font-size:19px; font-weight:750; line-height:1.3;}
+  .detail-hero .lot{color:var(--ink-soft); font-size:14px; margin-top:3px;}
+  .stat-grid{display:grid; grid-template-columns:1fr 1fr; gap:10px; margin:14px 0;}
+  .stat-box{background:var(--card); border:1px solid var(--line); border-radius:12px; padding:12px 14px;}
+  .stat-box .num{font-size:22px; font-weight:750; color:var(--turf);}
+  .stat-box .lbl{font-size:12.5px; color:var(--ink-soft); font-weight:600; margin-top:2px;}
+  .map-link{
+    display:flex; align-items:center; gap:9px; background:var(--card); border:1px solid var(--line);
+    border-radius:12px; padding:13px 14px; text-decoration:none; color:var(--ink); font-weight:600;
+    font-size:14.5px; margin-bottom:14px;
+  }
+  .section-lbl{font-size:13px; font-weight:700; color:var(--ink-soft); text-transform:uppercase; letter-spacing:.03em; margin:18px 0 8px 0;}
+  .detail-photo-grid{display:grid; grid-template-columns:repeat(3,1fr); gap:8px;}
+  .detail-photo-grid img{width:100%; aspect-ratio:1; object-fit:cover; border-radius:10px; cursor:pointer;}
+  .action-row{display:flex; gap:10px; margin-top:20px;}
+  .action-row .btn{flex:1;}
+
+  .drop-form{background:var(--card); border:1px solid var(--line); border-radius:var(--radius); padding:16px; margin-bottom:18px; box-shadow:var(--shadow);}
+  .drop-form .quick-row{display:flex; gap:10px;}
+  .drop-form .quick-row .field{flex:1;}
+  .day-group{margin-bottom:6px;}
+  .day-group .day-lbl{font-size:12.5px; font-weight:700; color:var(--ink-soft); text-transform:uppercase; letter-spacing:.03em; margin:16px 2px 8px 2px;}
+  .drop-card{
+    background:var(--card); border:1px solid var(--line); border-radius:12px; padding:12px 14px;
+    display:flex; justify-content:space-between; align-items:center; margin-bottom:8px; box-shadow:var(--shadow);
+  }
+  .drop-card .left{display:flex; align-items:center; gap:11px;}
+  .drop-card .badge{background:var(--hauler-light); color:var(--hauler); font-weight:750; font-size:13.5px; border-radius:9px; padding:7px 10px; min-width:52px; text-align:center;}
+  .drop-card .info .hood{font-weight:650; font-size:14.5px;}
+  .drop-card .info .time{font-size:12px; color:var(--ink-soft); margin-top:1px;}
+  .drop-card .actions{display:flex; gap:6px;}
+  .icon-btn{width:32px; height:32px; border-radius:8px; border:1px solid var(--line); background:var(--cream); display:flex; align-items:center; justify-content:center; cursor:pointer; color:var(--ink-soft);}
+  .icon-btn:active{background:#EFEAE0;}
+  .copy-toast{
+    position:fixed; bottom:26px; left:50%; transform:translateX(-50%) translateY(20px);
+    background:var(--ink); color:#fff; padding:10px 18px; border-radius:10px; font-size:13.5px;
+    font-weight:600; opacity:0; transition:all .2s; z-index:60; pointer-events:none;
+  }
+  .copy-toast.show{opacity:1; transform:translateX(-50%) translateY(0);}
+
+  .lightbox{position:fixed; inset:0; background:rgba(0,0,0,0.9); z-index:80; display:none; align-items:center; justify-content:center; padding:20px;}
+  .lightbox.show{display:flex;}
+  .lightbox img{max-width:100%; max-height:100%; border-radius:8px;}
+  .lightbox .lb-close{position:absolute; top:20px; right:20px; width:38px; height:38px; border-radius:50%; background:rgba(255,255,255,0.15); border:none; color:#fff; font-size:20px; cursor:pointer;}
+
+  .loading-row{text-align:center; padding:30px; color:var(--ink-soft); font-size:14px;}
+  .spinner{width:20px; height:20px; border:2.5px solid var(--line); border-top-color:var(--turf-accent); border-radius:50%; animation:spin .7s linear infinite; margin:0 auto 10px auto;}
+  @keyframes spin{to{transform:rotate(360deg);}}
+
+  .config-warning{
+    margin:16px; padding:16px; background:var(--warn-light); border:1px solid #E9C2A6; border-radius:12px;
+    color:var(--warn); font-size:13.5px; line-height:1.5;
+  }
+  .config-warning code{background:rgba(0,0,0,0.06); padding:1px 5px; border-radius:4px;}
+
+  ::placeholder{color:#B7B0A0;}
+</style>
+</head>
+<body>
+<div class="app">
+
+  <div class="banner banner-offline" id="offline-banner">
+    <span>⚠ You're offline — changes will sync once you're back online.</span>
+  </div>
+  <div class="banner banner-install" id="install-banner">
+    <span id="install-banner-text">Install this app on your phone for one-tap access.</span>
+    <button id="install-btn">Install</button>
+    <button class="dismiss" id="install-dismiss">✕</button>
+  </div>
+
+  <div id="config-warning" class="config-warning" style="display:none;">
+    <strong>Setup needed:</strong> This app needs a Firebase project connected before it can save data.
+    Open <code>index.html</code> and fill in the <code>firebaseConfig</code> object near the top of the
+    script with your project's credentials (see <code>README.md</code> for step-by-step instructions).
+  </div>
+
+  <header class="top">
+    <div class="brand">
+      <span class="mark">S</span>
+      <h1>Sod Job Tracker</h1>
+      <span class="sync-dot" id="sync-dot" title="Sync status"></span>
+    </div>
+    <div class="tabs">
+      <button class="tab-btn active" data-tab="install"><span class="dot"></span>Install Jobs</button>
+      <button class="tab-btn" data-tab="drops"><span class="dot"></span>Load Drops</button>
+    </div>
+  </header>
+
+  <main>
+    <section id="view-install" class="view active">
+      <div class="fab-row">
+        <button class="btn btn-primary" id="btn-new-job">+ New Job</button>
+        <button class="btn btn-ghost" id="btn-export-jobs" title="Export to CSV">⬇ CSV</button>
+      </div>
+      <div class="search-wrap">
+        <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="11" cy="11" r="7"/><line x1="21" y1="21" x2="16.65" y2="16.65"/></svg>
+        <input id="job-search" placeholder="Search by address or lot #">
+      </div>
+      <div id="job-list"></div>
+    </section>
+
+    <section id="view-drops" class="view">
+      <div class="drop-form">
+        <div class="field">
+          <label>Neighborhood / Job Name</label>
+          <input id="drop-hood" placeholder="e.g. Selah Meadows">
+        </div>
+        <div class="quick-row">
+          <div class="field"><label>Big Rolls</label><input id="drop-rolls" type="number" inputmode="numeric" placeholder="0"></div>
+          <div class="field"><label>Pallets</label><input id="drop-pallets" type="number" inputmode="numeric" placeholder="0"></div>
+        </div>
+        <div class="field" style="margin-bottom:12px;">
+          <label>Note (optional)</label>
+          <input id="drop-note" placeholder="Trucking co., driver, etc.">
+        </div>
+        <button class="btn btn-hauler btn-block" id="btn-add-drop">+ Log This Drop</button>
+      </div>
+      <div class="fab-row" style="margin-bottom:10px;">
+        <button class="btn btn-ghost btn-block" id="btn-export-drops" title="Export to CSV">⬇ Export Drops CSV</button>
+      </div>
+      <div id="drop-list"></div>
+    </section>
+  </main>
+</div>
+
+<div class="sheet-backdrop" id="job-sheet-backdrop"></div>
+<div class="sheet" id="job-sheet">
+  <div class="sheet-header">
+    <h2 id="job-sheet-title">New Job</h2>
+    <button class="close-x" id="job-sheet-close">✕</button>
+  </div>
+  <div class="sheet-body">
+    <div class="field"><label>Address *</label><input id="f-address" placeholder="123 Oak St, Selah Meadows"></div>
+    <div class="field-row"><div class="field"><label>Lot #</label><input id="f-lot" placeholder="Optional"></div></div>
+    <div class="field-row">
+      <div class="field"><label>Big Rolls</label><input id="f-rolls" type="number" inputmode="numeric" placeholder="0"></div>
+      <div class="field"><label>Pallets</label><input id="f-pallets" type="number" inputmode="numeric" placeholder="0"></div>
+    </div>
+    <div class="field">
+      <label>Google Maps Pin (link)</label>
+      <input id="f-maps" placeholder="Paste Google Maps link">
+      <div class="hint">Open Google Maps, drop a pin on the lot, tap Share → Copy Link, paste here.</div>
+    </div>
+    <div class="field">
+      <label>Photos of Work Performed</label>
+      <div class="photo-grid" id="photo-grid">
+        <label class="add-photo-btn">
+          <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M12 5v14M5 12h14"/></svg>
+          Add
+          <input type="file" accept="image/*" capture="environment" multiple id="photo-input" style="display:none;">
+        </label>
+      </div>
+      <div class="hint">Photos are compressed and uploaded automatically.</div>
+    </div>
+    <div class="field"><label>Notes</label><textarea id="f-notes" placeholder="Anything else about this job"></textarea></div>
+    <button class="btn btn-primary btn-block" id="btn-save-job">Save Job</button>
+    <div id="delete-row" style="margin-top:10px; display:none;">
+      <button class="btn btn-danger btn-block" id="btn-delete-job">Delete Job</button>
+    </div>
+  </div>
+</div>
+
+<div class="sheet-backdrop" id="detail-sheet-backdrop"></div>
+<div class="sheet" id="detail-sheet">
+  <div class="sheet-header"><h2>Job Details</h2><button class="close-x" id="detail-sheet-close">✕</button></div>
+  <div class="sheet-body" id="detail-body"></div>
+</div>
+
+<div class="lightbox" id="lightbox"><button class="lb-close" id="lb-close">✕</button><img id="lb-img" src=""></div>
+<div class="copy-toast" id="copy-toast">Copied to clipboard</div>
+
+<!-- Firebase (compat SDK — no build step needed) -->
+<script src="https://www.gstatic.com/firebasejs/10.12.2/firebase-app-compat.js"></script>
+<script src="https://www.gstatic.com/firebasejs/10.12.2/firebase-firestore-compat.js"></script>
+<script src="https://www.gstatic.com/firebasejs/10.12.2/firebase-storage-compat.js"></script>
+
+<script>
+(function(){
+  "use strict";
+
+  // =====================================================================
+  // FIREBASE SETUP — replace with your own project's config.
+  // Create a free project at https://console.firebase.google.com,
+  // enable Firestore + Storage, then Project Settings → your web app →
+  // paste the config object it gives you here. See README.md.
+  // =====================================================================
+  const firebaseConfig = {
+  apiKey: "AIzaSyBrgKM6Bjev8lQHE2afUpPYNPHkgL6E1Gg",
+  authDomain: "sod-job-tracker.firebaseapp.com",
+  projectId: "sod-job-tracker",
+  storageBucket: "sod-job-tracker.firebasestorage.app",
+  messagingSenderId: "647074871546",
+  appId: "1:647074871546:web:0b601b941f7e25286eb143",
+  measurementId: "G-CWNQ147Y0Y"
+};
+
+  const isConfigured = firebaseConfig.apiKey && firebaseConfig.apiKey !== "YOUR_API_KEY";
+  let db = null, storage = null;
+
+  if (isConfigured){
+    firebase.initializeApp(firebaseConfig);
+    db = firebase.firestore();
+    storage = firebase.storage();
+    db.enablePersistence({ synchronizeTabs: true }).catch((err) => {
+      console.warn("Offline persistence unavailable:", err.code);
+    });
+  } else {
+    document.getElementById("config-warning").style.display = "block";
+  }
+
+  // ---------------- Connection status ----------------
+  const syncDot = document.getElementById("sync-dot");
+  const offlineBanner = document.getElementById("offline-banner");
+  function updateOnlineStatus(){
+    const online = navigator.onLine;
+    syncDot.classList.toggle("offline", !online);
+    offlineBanner.classList.toggle("show", !online);
+  }
+  window.addEventListener("online", updateOnlineStatus);
+  window.addEventListener("offline", updateOnlineStatus);
+  updateOnlineStatus();
+
+  // ---------------- Install-to-home-screen prompt ----------------
+  let deferredInstallPrompt = null;
+  const installBanner = document.getElementById("install-banner");
+  const isStandalone = window.matchMedia("(display-mode: standalone)").matches || window.navigator.standalone;
+  const dismissed = sessionStorage.getItem("installBannerDismissed");
+
+  window.addEventListener("beforeinstallprompt", (e) => {
+    e.preventDefault();
+    deferredInstallPrompt = e;
+    if (!isStandalone && !dismissed) installBanner.classList.add("show");
+  });
+  document.getElementById("install-btn").addEventListener("click", async () => {
+    if (!deferredInstallPrompt) return;
+    deferredInstallPrompt.prompt();
+    await deferredInstallPrompt.userChoice;
+    deferredInstallPrompt = null;
+    installBanner.classList.remove("show");
+  });
+  document.getElementById("install-dismiss").addEventListener("click", () => {
+    installBanner.classList.remove("show");
+    sessionStorage.setItem("installBannerDismissed", "1");
+  });
+  // iOS Safari has no beforeinstallprompt — show manual instructions instead.
+  const isIOS = /iphone|ipad|ipod/i.test(navigator.userAgent);
+  if (isIOS && !isStandalone && !dismissed){
+    document.getElementById("install-banner-text").textContent =
+      "Install: tap the Share icon, then “Add to Home Screen.”";
+    document.getElementById("install-btn").style.display = "none";
+    installBanner.classList.add("show");
+  }
+
+  // Register service worker
+  if ("serviceWorker" in navigator){
+    window.addEventListener("load", () => {
+      navigator.serviceWorker.register("sw.js").catch((err) => console.warn("SW registration failed", err));
+    });
+  }
+
+  function uid(prefix){ return prefix + "_" + Date.now().toString(36) + Math.random().toString(36).slice(2,7); }
+  function escapeHtml(s){ return (s||"").replace(/[&<>"']/g, c => ({"&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;","'":"&#39;"}[c])); }
+  function csvCell(v){
+    const s = String(v == null ? "" : v);
+    return /[",\n]/.test(s) ? '"' + s.replace(/"/g,'""') + '"' : s;
+  }
+  function downloadCsv(filename, rows){
+    const csv = rows.map(r => r.map(csvCell).join(",")).join("\n");
+    const blob = new Blob([csv], { type: "text/csv;charset=utf-8;" });
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement("a");
+    a.href = url; a.download = filename;
+    document.body.appendChild(a); a.click(); document.body.removeChild(a);
+    URL.revokeObjectURL(url);
+  }
+
+  // ---------------- Tabs ----------------
+  const tabBtns = document.querySelectorAll(".tab-btn");
+  tabBtns.forEach(btn => {
+    btn.addEventListener("click", () => {
+      tabBtns.forEach(b => b.classList.remove("active"));
+      btn.classList.add("active");
+      document.querySelectorAll(".view").forEach(v => v.classList.remove("active"));
+      document.getElementById("view-" + btn.dataset.tab).classList.add("active");
+    });
+  });
+
+  // ==================================================
+  // INSTALL JOBS
+  // ==================================================
+  let jobsCache = [];
+  let pendingPhotos = []; // {id, url, storagePath, uploading}
+  let editingJobId = null;
+
+  const jobListEl = document.getElementById("job-list");
+  const jobSheet = document.getElementById("job-sheet");
+  const jobSheetBackdrop = document.getElementById("job-sheet-backdrop");
+
+  function openJobSheet(job){
+    editingJobId = job ? job.id : null;
+    document.getElementById("job-sheet-title").textContent = job ? "Edit Job" : "New Job";
+    document.getElementById("f-address").value = job ? job.address : "";
+    document.getElementById("f-lot").value = job ? job.lot : "";
+    document.getElementById("f-rolls").value = job ? job.bigRolls : "";
+    document.getElementById("f-pallets").value = job ? job.pallets : "";
+    document.getElementById("f-maps").value = job ? job.mapsLink : "";
+    document.getElementById("f-notes").value = job ? job.notes : "";
+    pendingPhotos = job && job.photos ? job.photos.slice() : [];
+    renderPhotoGrid();
+    document.getElementById("delete-row").style.display = job ? "block" : "none";
+    jobSheetBackdrop.classList.add("show");
+    jobSheet.classList.add("show");
+  }
+  function closeJobSheet(){ jobSheetBackdrop.classList.remove("show"); jobSheet.classList.remove("show"); }
+  document.getElementById("btn-new-job").addEventListener("click", () => {
+    if (!isConfigured){ alert("Connect Firebase first — see the setup notice above."); return; }
+    openJobSheet(null);
+  });
+  document.getElementById("job-sheet-close").addEventListener("click", closeJobSheet);
+  jobSheetBackdrop.addEventListener("click", closeJobSheet);
+
+  function renderPhotoGrid(){
+    const grid = document.getElementById("photo-grid");
+    grid.querySelectorAll(".photo-thumb").forEach(el => el.remove());
+    const addBtn = grid.querySelector(".add-photo-btn");
+    pendingPhotos.forEach(p => {
+      const div = document.createElement("div");
+      div.className = "photo-thumb";
+      div.innerHTML = `<img src="${p.url || ''}">${p.uploading ? '<div class="uploading"><div class="spinner"></div></div>' : ''}<button class="rm" data-id="${p.id}">✕</button>`;
+      grid.insertBefore(div, addBtn);
+    });
+    grid.querySelectorAll(".rm").forEach(btn => {
+      btn.addEventListener("click", async (e) => {
+        e.preventDefault();
+        const photo = pendingPhotos.find(p => p.id === btn.dataset.id);
+        pendingPhotos = pendingPhotos.filter(p => p.id !== btn.dataset.id);
+        renderPhotoGrid();
+        if (photo && photo.storagePath){
+          try{ await storage.ref(photo.storagePath).delete(); }catch(e){ console.warn("photo delete failed", e); }
+        }
+      });
+    });
+  }
+
+  function resizeToBlob(file, maxDim, quality){
+    return new Promise((resolve, reject) => {
+      const reader = new FileReader();
+      reader.onload = (e) => {
+        const img = new Image();
+        img.onload = () => {
+          let w = img.width, h = img.height;
+          if (w > h && w > maxDim){ h = Math.round(h * (maxDim/w)); w = maxDim; }
+          else if (h >= w && h > maxDim){ w = Math.round(w * (maxDim/h)); h = maxDim; }
+          const canvas = document.createElement("canvas");
+          canvas.width = w; canvas.height = h;
+          canvas.getContext("2d").drawImage(img, 0, 0, w, h);
+          canvas.toBlob((blob) => resolve(blob), "image/jpeg", quality);
+        };
+        img.onerror = reject;
+        img.src = e.target.result;
+      };
+      reader.onerror = reject;
+      reader.readAsDataURL(file);
+    });
+  }
+
+  document.getElementById("photo-input").addEventListener("change", async (e) => {
+    const files = Array.from(e.target.files || []);
+    const jobIdForUpload = editingJobId || uid("job");
+    editingJobId = editingJobId || jobIdForUpload; // new job gets its id now so photos have a stable path
+
+    for (const f of files){
+      const photoId = uid("ph");
+      const placeholder = { id: photoId, url: "", storagePath: "", uploading: true };
+      pendingPhotos.push(placeholder);
+      renderPhotoGrid();
+      try{
+        const blob = await resizeToBlob(f, 1400, 0.72);
+        const path = `jobs/${jobIdForUpload}/${photoId}.jpg`;
+        await storage.ref(path).put(blob);
+        const url = await storage.ref(path).getDownloadURL();
+        const idx = pendingPhotos.findIndex(p => p.id === photoId);
+        if (idx > -1) pendingPhotos[idx] = { id: photoId, url, storagePath: path, uploading: false };
+      }catch(err){
+        console.error("upload failed", err);
+        pendingPhotos = pendingPhotos.filter(p => p.id !== photoId);
+        alert("A photo failed to upload — check your connection and try again.");
+      }
+      renderPhotoGrid();
+    }
+    e.target.value = "";
+  });
+
+  document.getElementById("btn-save-job").addEventListener("click", async () => {
+    const address = document.getElementById("f-address").value.trim();
+    if (!address){ document.getElementById("f-address").focus(); return; }
+    const saveBtn = document.getElementById("btn-save-job");
+    saveBtn.disabled = true; saveBtn.textContent = "Saving…";
+
+    const jobId = editingJobId || uid("job");
+    const existing = jobsCache.find(j => j.id === jobId);
+    const job = {
+      id: jobId,
+      address,
+      lot: document.getElementById("f-lot").value.trim(),
+      bigRolls: document.getElementById("f-rolls").value || "0",
+      pallets: document.getElementById("f-pallets").value || "0",
+      mapsLink: document.getElementById("f-maps").value.trim(),
+      notes: document.getElementById("f-notes").value.trim(),
+      photos: pendingPhotos.filter(p => !p.uploading),
+      createdAt: existing ? existing.createdAt : Date.now(),
+      updatedAt: Date.now()
+    };
+
+    try{
+      await db.collection("jobs").doc(jobId).set(job);
+    }catch(err){
+      console.error(err);
+      saveBtn.disabled = false; saveBtn.textContent = "Save Job";
+      alert("Couldn't save — check your connection and try again.");
+      return;
+    }
+    saveBtn.disabled = false; saveBtn.textContent = "Save Job";
+    closeJobSheet();
+    loadJobs();
+  });
+
+  document.getElementById("btn-delete-job").addEventListener("click", async () => {
+    if (!editingJobId) return;
+    if (!confirm("Delete this job and its photos? This can't be undone.")) return;
+    const job = jobsCache.find(j => j.id === editingJobId);
+    try{
+      if (job && job.photos){
+        await Promise.all(job.photos.filter(p => p.storagePath).map(p => storage.ref(p.storagePath).delete().catch(()=>{})));
+      }
+      await db.collection("jobs").doc(editingJobId).delete();
+    }catch(err){ console.error(err); alert("Couldn't delete — check your connection and try again."); return; }
+    closeJobSheet();
+    loadJobs();
+  });
+
+  async function loadJobs(){
+    if (!isConfigured) { renderJobList(); return; }
+    jobListEl.innerHTML = `<div class="loading-row"><div class="spinner"></div>Loading jobs…</div>`;
+    try{
+      const snap = await db.collection("jobs").orderBy("createdAt", "desc").get();
+      jobsCache = snap.docs.map(d => d.data());
+    }catch(err){
+      console.error(err);
+      jobListEl.innerHTML = `<div class="empty"><div class="icon">⚠</div><h3>Couldn't load jobs</h3><p>Check your connection and pull to refresh.</p></div>`;
+      return;
+    }
+    renderJobList();
+  }
+
+  function renderJobList(){
+    const q = (document.getElementById("job-search").value || "").toLowerCase().trim();
+    const filtered = jobsCache.filter(j => !q || (j.address||"").toLowerCase().includes(q) || (j.lot||"").toLowerCase().includes(q));
+    if (filtered.length === 0){
+      jobListEl.innerHTML = `
+        <div class="empty">
+          <div class="icon">🌱</div>
+          <h3>${jobsCache.length === 0 ? "No jobs yet" : "No matches"}</h3>
+          <p>${jobsCache.length === 0 ? "Tap “+ New Job” to create your first job folder." : "Try a different search."}</p>
+        </div>`;
+      return;
+    }
+    jobListEl.innerHTML = filtered.map(j => `
+      <div class="job-card" data-id="${j.id}">
+        <div class="row1">
+          <div>
+            <div class="addr">${escapeHtml(j.address)}</div>
+            ${j.lot ? `<div class="lot">Lot ${escapeHtml(j.lot)}</div>` : ""}
+          </div>
+        </div>
+        <div class="stats">
+          <span class="pill">${j.bigRolls || 0} rolls</span>
+          <span class="pill soil">${j.pallets || 0} pallets</span>
+          ${j.photos && j.photos.length ? `<span class="pill photos">📷 ${j.photos.length}</span>` : ""}
+        </div>
+        <div class="date">${new Date(j.createdAt).toLocaleDateString(undefined,{month:'short',day:'numeric',year:'numeric'})}</div>
+      </div>
+    `).join("");
+    jobListEl.querySelectorAll(".job-card").forEach(card => {
+      card.addEventListener("click", () => {
+        const job = jobsCache.find(j => j.id === card.dataset.id);
+        if (job) openJobDetail(job);
+      });
+    });
+  }
+  document.getElementById("job-search").addEventListener("input", renderJobList);
+
+  document.getElementById("btn-export-jobs").addEventListener("click", () => {
+    const rows = [["Address","Lot #","Big Rolls","Pallets","Maps Link","Notes","Photo Count","Created"]];
+    jobsCache.forEach(j => rows.push([
+      j.address, j.lot||"", j.bigRolls||0, j.pallets||0, j.mapsLink||"", j.notes||"",
+      (j.photos||[]).length, new Date(j.createdAt).toLocaleDateString()
+    ]));
+    downloadCsv("sod-install-jobs.csv", rows);
+  });
+
+  const detailSheet = document.getElementById("detail-sheet");
+  const detailSheetBackdrop = document.getElementById("detail-sheet-backdrop");
+  function closeDetailSheet(){ detailSheetBackdrop.classList.remove("show"); detailSheet.classList.remove("show"); }
+  document.getElementById("detail-sheet-close").addEventListener("click", closeDetailSheet);
+  detailSheetBackdrop.addEventListener("click", closeDetailSheet);
+
+  function openJobDetail(job){
+    const body = document.getElementById("detail-body");
+    body.innerHTML = `
+      <div class="detail-hero">
+        <div class="addr">${escapeHtml(job.address)}</div>
+        ${job.lot ? `<div class="lot">Lot ${escapeHtml(job.lot)}</div>` : ""}
+      </div>
+      <div class="stat-grid">
+        <div class="stat-box"><div class="num">${job.bigRolls || 0}</div><div class="lbl">Big Rolls</div></div>
+        <div class="stat-box"><div class="num">${job.pallets || 0}</div><div class="lbl">Pallets</div></div>
+      </div>
+      ${job.mapsLink ? `
+      <a class="map-link" href="${escapeHtml(job.mapsLink)}" target="_blank" rel="noopener">
+        <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M21 10c0 7-9 13-9 13s-9-6-9-13a9 9 0 0 1 18 0z"/><circle cx="12" cy="10" r="3"/></svg>
+        Open location in Google Maps
+      </a>` : ""}
+      ${job.notes ? `<div class="section-lbl">Notes</div><div style="font-size:14.5px; line-height:1.5;">${escapeHtml(job.notes)}</div>` : ""}
+      <div class="section-lbl">Photos (${(job.photos||[]).length})</div>
+      ${job.photos && job.photos.length ? `
+      <div class="detail-photo-grid">${job.photos.map(p => `<img src="${p.url}" data-src="${p.url}">`).join("")}</div>` : `<div class="hint">No photos added yet.</div>`}
+      <div class="action-row"><button class="btn btn-ghost" id="detail-edit-btn">Edit Job</button></div>
+    `;
+    body.querySelectorAll(".detail-photo-grid img").forEach(img => {
+      img.addEventListener("click", () => {
+        document.getElementById("lb-img").src = img.dataset.src;
+        document.getElementById("lightbox").classList.add("show");
+      });
+    });
+    body.querySelector("#detail-edit-btn").addEventListener("click", () => { closeDetailSheet(); openJobSheet(job); });
+    detailSheetBackdrop.classList.add("show");
+    detailSheet.classList.add("show");
+  }
+
+  document.getElementById("lb-close").addEventListener("click", () => document.getElementById("lightbox").classList.remove("show"));
+  document.getElementById("lightbox").addEventListener("click", (e) => { if (e.target.id === "lightbox") document.getElementById("lightbox").classList.remove("show"); });
+
+  // ==================================================
+  // LOAD DROPS
+  // ==================================================
+  let dropsCache = [];
+  const dropListEl = document.getElementById("drop-list");
+
+  document.getElementById("btn-add-drop").addEventListener("click", async () => {
+    if (!isConfigured){ alert("Connect Firebase first — see the setup notice above."); return; }
+    const hood = document.getElementById("drop-hood").value.trim();
+    const rolls = document.getElementById("drop-rolls").value || "0";
+    const pallets = document.getElementById("drop-pallets").value || "0";
+    const note = document.getElementById("drop-note").value.trim();
+    if (!hood){ document.getElementById("drop-hood").focus(); return; }
+
+    const btn = document.getElementById("btn-add-drop");
+    btn.disabled = true; btn.textContent = "Logging…";
+    const drop = { id: uid("drop"), neighborhood: hood, bigRolls: rolls, pallets: pallets, note, timestamp: Date.now() };
+    try{
+      await db.collection("drops").doc(drop.id).set(drop);
+    }catch(err){
+      console.error(err);
+      btn.disabled = false; btn.textContent = "+ Log This Drop";
+      alert("Couldn't save — check your connection and try again.");
+      return;
+    }
+    btn.disabled = false; btn.textContent = "+ Log This Drop";
+    document.getElementById("drop-hood").value = "";
+    document.getElementById("drop-rolls").value = "";
+    document.getElementById("drop-pallets").value = "";
+    document.getElementById("drop-note").value = "";
+    loadDrops();
+  });
+
+  async function loadDrops(){
+    if (!isConfigured) { renderDropList(); return; }
+    dropListEl.innerHTML = `<div class="loading-row"><div class="spinner"></div>Loading drops…</div>`;
+    try{
+      const snap = await db.collection("drops").orderBy("timestamp", "desc").get();
+      dropsCache = snap.docs.map(d => d.data());
+    }catch(err){
+      console.error(err);
+      dropListEl.innerHTML = `<div class="empty"><div class="icon">⚠</div><h3>Couldn't load drops</h3><p>Check your connection and pull to refresh.</p></div>`;
+      return;
+    }
+    renderDropList();
+  }
+
+  function dayLabel(ts){
+    const d = new Date(ts);
+    const today = new Date();
+    const yest = new Date(); yest.setDate(today.getDate()-1);
+    const sameDay = (a,b) => a.toDateString() === b.toDateString();
+    if (sameDay(d, today)) return "Today";
+    if (sameDay(d, yest)) return "Yesterday";
+    return d.toLocaleDateString(undefined, {weekday:'long', month:'short', day:'numeric'});
+  }
+
+  function renderDropList(){
+    if (dropsCache.length === 0){
+      dropListEl.innerHTML = `<div class="empty"><div class="icon">🚚</div><h3>No drops logged yet</h3><p>Log each drop after delivery — takes about five seconds.</p></div>`;
+      return;
+    }
+    const groups = [];
+    let lastLabel = null;
+    dropsCache.forEach(d => {
+      const lbl = dayLabel(d.timestamp);
+      if (lbl !== lastLabel){ groups.push({label: lbl, items: []}); lastLabel = lbl; }
+      groups[groups.length-1].items.push(d);
+    });
+
+    dropListEl.innerHTML = groups.map(g => `
+      <div class="day-group">
+        <div class="day-lbl">${g.label}</div>
+        ${g.items.map(d => `
+          <div class="drop-card" data-id="${d.id}">
+            <div class="left">
+              <div class="badge">${d.bigRolls||0}/${d.pallets||0}</div>
+              <div class="info">
+                <div class="hood">${escapeHtml(d.neighborhood)}</div>
+                <div class="time">${new Date(d.timestamp).toLocaleTimeString(undefined,{hour:'numeric',minute:'2-digit'})}${d.note ? " · " + escapeHtml(d.note) : ""}</div>
+              </div>
+            </div>
+            <div class="actions">
+              <button class="icon-btn copy-btn" data-text="${escapeHtml(d.bigRolls||0)}/${escapeHtml(d.pallets||0)} ${escapeHtml(d.neighborhood)}" title="Copy as text">
+                <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="9" y="9" width="13" height="13" rx="2"/><path d="M5 15H4a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h9a2 2 0 0 1 2 2v1"/></svg>
+              </button>
+              <button class="icon-btn del-btn" title="Delete">
+                <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M3 6h18M8 6V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2m3 0-1 14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2L4 6"/></svg>
+              </button>
+            </div>
+          </div>
+        `).join("")}
+      </div>
+    `).join("");
+
+    dropListEl.querySelectorAll(".copy-btn").forEach(btn => {
+      btn.addEventListener("click", async () => {
+        const text = btn.dataset.text;
+        try{ await navigator.clipboard.writeText(text); showToast("Copied: " + text); }
+        catch(e){ showToast("Couldn't copy — long-press to copy manually"); }
+      });
+    });
+    dropListEl.querySelectorAll(".del-btn").forEach(btn => {
+      btn.addEventListener("click", async (e) => {
+        const card = e.target.closest(".drop-card");
+        const id = card.dataset.id;
+        if (!confirm("Delete this drop entry?")) return;
+        try{ await db.collection("drops").doc(id).delete(); }
+        catch(err){ alert("Couldn't delete — check your connection and try again."); return; }
+        loadDrops();
+      });
+    });
+  }
+
+  document.getElementById("btn-export-drops").addEventListener("click", () => {
+    const rows = [["Date","Time","Neighborhood","Big Rolls","Pallets","Note"]];
+    dropsCache.forEach(d => {
+      const dt = new Date(d.timestamp);
+      rows.push([dt.toLocaleDateString(), dt.toLocaleTimeString(), d.neighborhood, d.bigRolls||0, d.pallets||0, d.note||""]);
+    });
+    downloadCsv("sod-load-drops.csv", rows);
+  });
+
+  function showToast(msg){
+    const t = document.getElementById("copy-toast");
+    t.textContent = msg;
+    t.classList.add("show");
+    setTimeout(() => t.classList.remove("show"), 1800);
+  }
+
+  // ---------------- Init ----------------
+  loadJobs();
+  loadDrops();
+})();
+</script>
+</body>
+</html>
