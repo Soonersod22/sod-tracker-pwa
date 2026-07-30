@@ -4,7 +4,7 @@
 // sync, but Firestore's own offline cache (enabled in index.html) covers
 // short gaps automatically.
 
-const CACHE_NAME = "sod-tracker-shell-v1";
+const CACHE_NAME = "sod-tracker-shell-v2";
 const SHELL_FILES = [
   "./index.html",
   "./manifest.json",
@@ -32,21 +32,37 @@ self.addEventListener("activate", (event) => {
 
 self.addEventListener("fetch", (event) => {
   const req = event.request;
+  if (req.method !== "GET") return;
 
   // Never intercept Firebase/Firestore/Storage calls — always go to network.
   if (req.url.includes("googleapis.com") || req.url.includes("firebaseio.com") || req.url.includes("gstatic.com")) {
     return;
   }
 
-  // App shell: cache-first, falling back to network.
+  // The app page (HTML) uses NETWORK-FIRST so a freshly deployed version
+  // shows up right away, with the cached copy as an offline fallback.
+  const isHTML = req.mode === "navigate" || (req.headers.get("accept") || "").includes("text/html");
+  if (isHTML) {
+    event.respondWith(
+      fetch(req)
+        .then((res) => {
+          const resClone = res.clone();
+          caches.open(CACHE_NAME).then((cache) => cache.put("./index.html", resClone));
+          return res;
+        })
+        .catch(() => caches.match(req).then((c) => c || caches.match("./index.html")))
+    );
+    return;
+  }
+
+  // Other assets (icons, manifest): cache-first, falling back to network.
   event.respondWith(
     caches.match(req).then((cached) => {
       return (
         cached ||
         fetch(req)
           .then((res) => {
-            // Cache same-origin GET responses for next time.
-            if (req.method === "GET" && res.ok && req.url.startsWith(self.location.origin)) {
+            if (res.ok && req.url.startsWith(self.location.origin)) {
               const resClone = res.clone();
               caches.open(CACHE_NAME).then((cache) => cache.put(req, resClone));
             }
