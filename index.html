@@ -127,11 +127,13 @@
 
   .subtabs{display:flex; gap:6px; margin-bottom:14px;}
   .subtab-btn{
-    flex:1; border:1.5px solid var(--line); background:var(--card); padding:9px 8px; border-radius:10px;
-    font-size:13.5px; font-weight:650; color:var(--ink-soft); cursor:pointer; font-family:inherit;
+    flex:1; border:1.5px solid var(--line); background:var(--card); padding:9px 6px; border-radius:10px;
+    font-size:13px; font-weight:650; color:var(--ink-soft); cursor:pointer; font-family:inherit;
+    white-space:nowrap; overflow:hidden; text-overflow:ellipsis;
   }
   .subtab-btn.active{background:var(--turf); color:#fff; border-color:var(--turf);}
   .pill.done{background:var(--turf); color:#fff;}
+  .pill.upcoming{background:var(--hauler-light); color:var(--hauler);}
 
   .empty{text-align:center; padding:50px 20px; color:var(--ink-soft);}
   .empty .icon{font-size:34px; margin-bottom:10px;}
@@ -281,6 +283,7 @@
         <button class="btn btn-ghost" id="btn-export-jobs" title="Export to CSV">⬇ CSV</button>
       </div>
       <div class="subtabs">
+        <button class="subtab-btn" data-jobfilter="upcoming" id="subtab-upcoming">Upcoming</button>
         <button class="subtab-btn active" data-jobfilter="open" id="subtab-open">Open</button>
         <button class="subtab-btn" data-jobfilter="completed" id="subtab-completed">Completed</button>
       </div>
@@ -456,6 +459,10 @@
   function normAddr(a){ return (a||"").trim().toLowerCase().replace(/\s+/g, " "); }
   // A job counts as "open" unless it has been explicitly marked completed.
   function isCompleted(j){ return j && j.status === "completed"; }
+  function isUpcoming(j){ return j && j.status === "upcoming"; }
+  // The lifecycle stage of a job: "upcoming" | "open" | "completed".
+  // (An "active" job is upcoming OR open — i.e. anything not completed.)
+  function jobStatus(j){ return isCompleted(j) ? "completed" : (isUpcoming(j) ? "upcoming" : "open"); }
   function csvCell(v){
     const s = String(v == null ? "" : v);
     return /[",\n]/.test(s) ? '"' + s.replace(/"/g,'""') + '"' : s;
@@ -487,16 +494,28 @@
   let jobsCache = [];
   let pendingPhotos = []; // {id, url, storagePath, uploading}
   let editingJobId = null;
-  let currentJobFilter = "open"; // "open" | "completed"
+  let currentJobFilter = "open"; // "upcoming" | "open" | "completed"
+  let creatingStatus = "open";   // status a brand-new job gets, based on the active tab
 
-  // Open / Completed sub-tabs on the Jobs screen
+  // Upcoming / Open / Completed sub-tabs on the Jobs screen
   document.querySelectorAll(".subtab-btn").forEach(btn => {
     btn.addEventListener("click", () => {
       currentJobFilter = btn.dataset.jobfilter;
       document.querySelectorAll(".subtab-btn").forEach(b => b.classList.toggle("active", b === btn));
+      updateNewJobButton();
       renderJobList();
     });
   });
+
+  // The "+ New Job" button adapts to the current tab: it creates an Upcoming
+  // job on the Upcoming tab, an Open job on the Open tab, and is hidden on
+  // Completed (you don't create finished jobs directly).
+  function updateNewJobButton(){
+    const b = document.getElementById("btn-new-job");
+    if (currentJobFilter === "completed"){ b.style.display = "none"; return; }
+    b.style.display = "";
+    b.textContent = currentJobFilter === "upcoming" ? "+ New Upcoming Job" : "+ New Job";
+  }
 
   const jobListEl = document.getElementById("job-list");
   const jobSheet = document.getElementById("job-sheet");
@@ -520,6 +539,7 @@
   function closeJobSheet(){ jobSheetBackdrop.classList.remove("show"); jobSheet.classList.remove("show"); }
   document.getElementById("btn-new-job").addEventListener("click", () => {
     if (!isConfigured){ alert("Connect Firebase first — see the setup notice above."); return; }
+    creatingStatus = currentJobFilter === "upcoming" ? "upcoming" : "open";
     openJobSheet(null);
   });
   document.getElementById("job-sheet-close").addEventListener("click", closeJobSheet);
@@ -607,7 +627,8 @@
     // block reuse, so an address frees up once its job is marked complete.
     const dupe = jobsCache.find(j => j.id !== jobId && !isCompleted(j) && normAddr(j.address) === normAddr(address));
     if (dupe){
-      alert("That address already has an open job:\n\n“" + dupe.address + "”\n\nMark that job complete first, or open it to edit.");
+      const stage = isUpcoming(dupe) ? "upcoming" : "open";
+      alert("That address already has an " + stage + " job:\n\n“" + dupe.address + "”\n\nComplete it first, or open it to edit.");
       document.getElementById("f-address").focus();
       return;
     }
@@ -625,7 +646,7 @@
       mapsLink: document.getElementById("f-maps").value.trim(),
       notes: document.getElementById("f-notes").value.trim(),
       photos: pendingPhotos.filter(p => !p.uploading),
-      status: existing && existing.status ? existing.status : "open",
+      status: existing && existing.status ? existing.status : creatingStatus,
       completedAt: existing && existing.completedAt ? existing.completedAt : null,
       createdAt: existing ? existing.createdAt : Date.now(),
       updatedAt: Date.now()
@@ -673,31 +694,37 @@
   }
 
   function renderJobList(){
-    // Keep the Open / Completed sub-tab counts current.
-    const openCount = jobsCache.filter(j => !isCompleted(j)).length;
-    const completedCount = jobsCache.filter(isCompleted).length;
-    document.getElementById("subtab-open").textContent = "Open" + (openCount ? " (" + openCount + ")" : "");
-    document.getElementById("subtab-completed").textContent = "Completed" + (completedCount ? " (" + completedCount + ")" : "");
+    // Keep the Upcoming / Open / Completed sub-tab counts current.
+    const counts = { upcoming:0, open:0, completed:0 };
+    jobsCache.forEach(j => counts[jobStatus(j)]++);
+    document.getElementById("subtab-upcoming").textContent = "Upcoming" + (counts.upcoming ? " (" + counts.upcoming + ")" : "");
+    document.getElementById("subtab-open").textContent = "Open" + (counts.open ? " (" + counts.open + ")" : "");
+    document.getElementById("subtab-completed").textContent = "Completed" + (counts.completed ? " (" + counts.completed + ")" : "");
 
     const q = (document.getElementById("job-search").value || "").toLowerCase().trim();
-    const showCompleted = currentJobFilter === "completed";
-    let list = jobsCache.filter(j => isCompleted(j) === showCompleted);
+    let list = jobsCache.filter(j => jobStatus(j) === currentJobFilter);
     // Completed jobs read best newest-finished-first.
-    if (showCompleted) list = list.slice().sort((a,b) => (b.completedAt||b.createdAt||0) - (a.completedAt||a.createdAt||0));
+    if (currentJobFilter === "completed") list = list.slice().sort((a,b) => (b.completedAt||b.createdAt||0) - (a.completedAt||a.createdAt||0));
     const filtered = list.filter(j => !q || (j.address||"").toLowerCase().includes(q) || (j.lot||"").toLowerCase().includes(q));
 
     if (filtered.length === 0){
       const noneYet = list.length === 0;
-      const icon = showCompleted ? "✅" : "🌱";
-      const h3 = noneYet ? (showCompleted ? "No completed jobs yet" : "No open jobs") : "No matches";
-      const p  = noneYet
-        ? (showCompleted ? "Jobs you mark complete will move here." : "Tap “+ New Job” to create your first job folder.")
-        : "Try a different search.";
-      jobListEl.innerHTML = `<div class="empty"><div class="icon">${icon}</div><h3>${h3}</h3><p>${p}</p></div>`;
+      const emptyByFilter = {
+        upcoming:  { icon:"🗓", h3:"No upcoming jobs", p:"Tap “+ New Upcoming Job” to schedule one before it goes to the crew." },
+        open:      { icon:"🌱", h3:"No open jobs", p:"Tap “+ New Job” to create your first job folder." },
+        completed: { icon:"✅", h3:"No completed jobs yet", p:"Jobs you mark complete will move here." }
+      };
+      const e = emptyByFilter[currentJobFilter] || emptyByFilter.open;
+      jobListEl.innerHTML = `<div class="empty"><div class="icon">${e.icon}</div><h3>${noneYet ? e.h3 : "No matches"}</h3><p>${noneYet ? e.p : "Try a different search."}</p></div>`;
       return;
     }
-    jobListEl.innerHTML = filtered.map(j => `
-      <div class="job-card${isCompleted(j) ? " completed" : ""}" data-id="${j.id}">
+    jobListEl.innerHTML = filtered.map(j => {
+      const st = jobStatus(j);
+      const dateStr = st === "completed" && j.completedAt
+        ? "Completed " + new Date(j.completedAt).toLocaleDateString(undefined,{month:'short',day:'numeric',year:'numeric'})
+        : new Date(j.createdAt).toLocaleDateString(undefined,{month:'short',day:'numeric',year:'numeric'});
+      return `
+      <div class="job-card${st === "completed" ? " completed" : ""}" data-id="${j.id}">
         <div class="row1">
           <div>
             <div class="addr">${escapeHtml(j.address)}</div>
@@ -708,13 +735,12 @@
           <span class="pill">${j.bigRolls || 0} rolls</span>
           <span class="pill soil">${j.pallets || 0} pallets</span>
           ${j.photos && j.photos.length ? `<span class="pill photos">📷 ${j.photos.length}</span>` : ""}
-          ${isCompleted(j) ? `<span class="pill done">✓ Completed</span>` : ""}
+          ${st === "upcoming" ? `<span class="pill upcoming">🗓 Upcoming</span>` : ""}
+          ${st === "completed" ? `<span class="pill done">✓ Completed</span>` : ""}
         </div>
-        <div class="date">${isCompleted(j) && j.completedAt
-          ? "Completed " + new Date(j.completedAt).toLocaleDateString(undefined,{month:'short',day:'numeric',year:'numeric'})
-          : new Date(j.createdAt).toLocaleDateString(undefined,{month:'short',day:'numeric',year:'numeric'})}</div>
-      </div>
-    `).join("");
+        <div class="date">${dateStr}</div>
+      </div>`;
+    }).join("");
     jobListEl.querySelectorAll(".job-card").forEach(card => {
       card.addEventListener("click", () => {
         const job = jobsCache.find(j => j.id === card.dataset.id);
@@ -728,7 +754,7 @@
     const rows = [["Address","Lot #","Big Rolls","Pallets","Maps Link","Notes","Photo Count","Status","Created","Completed"]];
     jobsCache.forEach(j => rows.push([
       j.address, j.lot||"", j.bigRolls||0, j.pallets||0, j.mapsLink||"", j.notes||"",
-      (j.photos||[]).length, isCompleted(j) ? "Completed" : "Open",
+      (j.photos||[]).length, jobStatus(j).charAt(0).toUpperCase() + jobStatus(j).slice(1),
       new Date(j.createdAt).toLocaleDateString(),
       j.completedAt ? new Date(j.completedAt).toLocaleDateString() : ""
     ]));
@@ -748,6 +774,7 @@
         <div class="addr">${escapeHtml(job.address)}</div>
         ${job.lot ? `<div class="lot">Lot ${escapeHtml(job.lot)}</div>` : ""}
         ${isCompleted(job) ? `<div class="lot" style="color:var(--turf); font-weight:700;">✓ Completed${job.completedAt ? " · " + new Date(job.completedAt).toLocaleDateString(undefined,{month:'short',day:'numeric',year:'numeric'}) : ""}</div>` : ""}
+        ${isUpcoming(job) ? `<div class="lot" style="color:var(--hauler); font-weight:700;">🗓 Upcoming — not yet visible to the crew</div>` : ""}
       </div>
       <div class="stat-grid">
         <div class="stat-box"><div class="num">${job.bigRolls || 0}</div><div class="lbl">Big Rolls</div></div>
@@ -764,7 +791,9 @@
       <div class="detail-photo-grid">${job.photos.map(p => `<img src="${p.url}" data-src="${p.url}">`).join("")}</div>` : `<div class="hint">No photos added yet.</div>`}
       <div class="action-row">
         <button class="btn btn-ghost" id="detail-edit-btn">Edit Job</button>
-        <button class="btn ${isCompleted(job) ? "btn-ghost" : "btn-primary"}" id="detail-complete-btn">${isCompleted(job) ? "Reopen Job" : "Mark Complete"}</button>
+        ${jobStatus(job) === "upcoming"
+          ? `<button class="btn btn-primary" id="detail-promote-btn">Move to Open</button>`
+          : `<button class="btn ${isCompleted(job) ? "btn-ghost" : "btn-primary"}" id="detail-complete-btn">${isCompleted(job) ? "Reopen Job" : "Mark Complete"}</button>`}
       </div>
     `;
     body.querySelectorAll(".detail-photo-grid img").forEach(img => {
@@ -774,9 +803,34 @@
       });
     });
     body.querySelector("#detail-edit-btn").addEventListener("click", () => { closeDetailSheet(); openJobSheet(job); });
-    body.querySelector("#detail-complete-btn").addEventListener("click", () => toggleJobComplete(job));
+    const promoteBtn = body.querySelector("#detail-promote-btn");
+    if (promoteBtn) promoteBtn.addEventListener("click", () => promoteToOpen(job));
+    const completeBtn = body.querySelector("#detail-complete-btn");
+    if (completeBtn) completeBtn.addEventListener("click", () => toggleJobComplete(job));
     detailSheetBackdrop.classList.add("show");
     detailSheet.classList.add("show");
+  }
+
+  // Promote an Upcoming (tentatively scheduled) job to the crew's Open list.
+  // NOTE: intended as a manager action; will be limited to managers once
+  // logins/roles are added.
+  async function promoteToOpen(job){
+    const btn = document.getElementById("detail-promote-btn");
+    if (btn){ btn.disabled = true; btn.textContent = "Moving…"; }
+    try{
+      await db.collection("jobs").doc(job.id).update({ status: "open", updatedAt: Date.now() });
+    }catch(err){
+      console.error(err);
+      if (btn){ btn.disabled = false; btn.textContent = "Move to Open"; }
+      alert("Couldn't move to Open — check your connection and try again.");
+      return;
+    }
+    closeDetailSheet();
+    currentJobFilter = "open";
+    document.querySelectorAll(".subtab-btn").forEach(b => b.classList.toggle("active", b.dataset.jobfilter === "open"));
+    updateNewJobButton();
+    await loadJobs();
+    showToast("Moved to Open — the crew can see it now");
   }
 
   // Mark a job complete (moves it to the Completed tab) or reopen it.
@@ -942,6 +996,7 @@
   }
 
   // ---------------- Init ----------------
+  updateNewJobButton();
   loadJobs();
   loadDrops();
 })();
