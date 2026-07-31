@@ -244,9 +244,56 @@
   .config-warning code{background:rgba(0,0,0,0.06); padding:1px 5px; border-radius:4px;}
 
   ::placeholder{color:#B7B0A0;}
+
+  /* ---------- Login screen + role UI ---------- */
+  .auth-screen{
+    position:fixed; inset:0; z-index:100; background:var(--cream);
+    display:flex; align-items:center; justify-content:center; padding:24px;
+  }
+  .auth-card{
+    width:100%; max-width:390px; background:var(--card); border:1px solid var(--line);
+    border-radius:var(--radius); box-shadow:var(--shadow); padding:26px 22px;
+  }
+  .auth-brand{display:flex; align-items:center; gap:10px; margin-bottom:6px;}
+  .auth-brand .mark{
+    width:34px; height:34px; border-radius:9px; color:#fff; font-weight:800; font-size:16px;
+    background:linear-gradient(135deg,var(--turf),var(--turf-accent));
+    display:flex; align-items:center; justify-content:center;
+  }
+  .auth-brand h1{font-size:19px; margin:0; font-weight:700;}
+  .auth-sub{color:var(--ink-soft); font-size:14px; margin:2px 0 18px 0; line-height:1.45;}
+  .auth-error{background:var(--warn-light); color:var(--warn); border-radius:9px; padding:10px 12px; font-size:13px; font-weight:600; margin-bottom:12px;}
+  .auth-pending{margin-top:14px; padding:14px; background:var(--turf-light); color:var(--turf); border-radius:10px; font-size:13.5px; line-height:1.5; text-align:center;}
+  .auth-link{background:none; border:none; color:var(--turf); font-weight:700; font-size:13.5px; cursor:pointer; font-family:inherit; padding:0;}
+  .header-user{margin-left:auto; display:flex; align-items:center; gap:8px;}
+  .role-chip{font-size:11px; font-weight:700; padding:3px 9px; border-radius:20px; background:var(--turf-light); color:var(--turf); text-transform:capitalize; white-space:nowrap;}
+  .signout-btn{border:1px solid var(--line); background:var(--card); color:var(--ink-soft); border-radius:8px; padding:5px 10px; font-size:12px; font-weight:650; cursor:pointer; font-family:inherit;}
+  .hidden-by-role{display:none !important;}
+  .crew-row{display:flex; align-items:center; justify-content:space-between; gap:12px; padding:12px 0; border-bottom:1px solid var(--line);}
+  .crew-row .who{min-width:0;}
+  .crew-row .email{font-size:14px; font-weight:600; word-break:break-all;}
+  .crew-row .you{font-size:11.5px; color:var(--turf-accent); font-weight:700;}
+  .crew-row select{border:1.5px solid var(--line); border-radius:9px; padding:8px 10px; font-size:14px; font-family:inherit; background:var(--card); color:var(--ink); flex-shrink:0;}
 </style>
 </head>
 <body>
+
+<div id="auth-screen" class="auth-screen" style="display:none;">
+  <div class="auth-card">
+    <div class="auth-brand"><span class="mark">S</span><h1>Sod Job Tracker</h1></div>
+    <p class="auth-sub" id="auth-sub">Sign in to your account.</p>
+    <div class="field"><label>Email</label><input id="auth-email" type="email" autocomplete="username" placeholder="you@company.com"></div>
+    <div class="field"><label>Password</label><input id="auth-password" type="password" autocomplete="current-password" placeholder="Your password"></div>
+    <div id="auth-error" class="auth-error" style="display:none;"></div>
+    <button class="btn btn-primary btn-block" id="auth-submit-btn">Sign In</button>
+    <p style="text-align:center; margin:14px 0 0 0; font-size:13.5px; color:var(--ink-soft);">
+      <span id="auth-toggle-text">New here?</span>
+      <button class="auth-link" id="auth-toggle-btn">Create an account</button>
+    </p>
+    <div id="auth-pending" class="auth-pending" style="display:none;"></div>
+  </div>
+</div>
+
 <div class="app">
 
   <div class="banner banner-offline" id="offline-banner">
@@ -269,10 +316,15 @@
       <span class="mark">S</span>
       <h1>Sod Job Tracker</h1>
       <span class="sync-dot" id="sync-dot" title="Sync status"></span>
+      <div class="header-user" id="header-user" style="display:none;">
+        <span class="role-chip" id="role-chip"></span>
+        <button class="signout-btn" id="crew-btn" style="display:none;">Crew</button>
+        <button class="signout-btn" id="signout-btn">Sign out</button>
+      </div>
     </div>
-    <div class="tabs">
-      <button class="tab-btn active" data-tab="install"><span class="dot"></span>Install Jobs</button>
-      <button class="tab-btn" data-tab="drops"><span class="dot"></span>Load Drops</button>
+    <div class="tabs" id="job-tabs">
+      <button class="tab-btn active" data-tab="install" id="tab-install"><span class="dot"></span>Install Jobs</button>
+      <button class="tab-btn" data-tab="drops" id="tab-drops"><span class="dot"></span>Load Drops</button>
     </div>
   </header>
 
@@ -361,6 +413,15 @@
   <div class="sheet-body" id="detail-body"></div>
 </div>
 
+<div class="sheet-backdrop" id="crew-sheet-backdrop"></div>
+<div class="sheet" id="crew-sheet">
+  <div class="sheet-header"><h2>Manage Crew</h2><button class="close-x" id="crew-sheet-close">✕</button></div>
+  <div class="sheet-body">
+    <p class="hint" style="margin-bottom:14px;">Set each person's role. They sign in with the email they created their account with. New sign-ups appear here as <b>Pending</b> until you give them a role.</p>
+    <div id="crew-list"><div class="loading-row"><div class="spinner"></div>Loading crew…</div></div>
+  </div>
+</div>
+
 <div class="lightbox" id="lightbox"><button class="lb-close" id="lb-close">✕</button><img id="lb-img" src=""></div>
 <div class="copy-toast" id="copy-toast">Copied to clipboard</div>
 
@@ -368,6 +429,7 @@
 <script src="https://www.gstatic.com/firebasejs/10.12.2/firebase-app-compat.js"></script>
 <script src="https://www.gstatic.com/firebasejs/10.12.2/firebase-firestore-compat.js"></script>
 <script src="https://www.gstatic.com/firebasejs/10.12.2/firebase-storage-compat.js"></script>
+<script src="https://www.gstatic.com/firebasejs/10.12.2/firebase-auth-compat.js"></script>
 
 <script>
 (function(){
@@ -390,17 +452,161 @@
 };
 
   const isConfigured = firebaseConfig.apiKey && firebaseConfig.apiKey !== "YOUR_API_KEY";
-  let db = null, storage = null;
+  let db = null, storage = null, auth = null;
 
   if (isConfigured){
     firebase.initializeApp(firebaseConfig);
     db = firebase.firestore();
     storage = firebase.storage();
+    auth = firebase.auth();
     db.enablePersistence({ synchronizeTabs: true }).catch((err) => {
       console.warn("Offline persistence unavailable:", err.code);
     });
   } else {
     document.getElementById("config-warning").style.display = "block";
+  }
+
+  // ============================================================
+  // AUTH + ROLES
+  // Roles live in Firestore at users/{uid} = { email, role }.
+  // role is one of: "manager" | "technician" | "semi" | "unassigned".
+  // A brand-new sign-up auto-creates its own doc as "unassigned"; a
+  // manager then assigns the real role from the Manage Crew screen.
+  // ============================================================
+  // The app owner is always treated as a manager (bootstrap, so there's no
+  // chicken-and-egg on the very first login). Change this if the owner email
+  // ever changes. The database rules grant the same email manager rights.
+  const OWNER_EMAIL = "soonersod@gmail.com";
+  let currentUser = null;   // firebase user
+  let currentRole = null;   // resolved role string
+  const ROLE_LABELS = { manager: "Manager", technician: "Technician", semi: "Semi Driver", unassigned: "Pending" };
+  const can = {
+    manageJobs: () => currentRole === "manager" || currentRole === "technician",
+    manageDrops: () => currentRole === "manager" || currentRole === "semi",
+    isManager: () => currentRole === "manager"
+  };
+
+  const authScreen = document.getElementById("auth-screen");
+  const appEl = document.querySelector(".app");
+  let authMode = "signin"; // "signin" | "signup"
+
+  function showAuthError(msg){
+    const el = document.getElementById("auth-error");
+    el.textContent = msg; el.style.display = msg ? "block" : "none";
+  }
+  function setAuthMode(mode){
+    authMode = mode;
+    document.getElementById("auth-sub").textContent = mode === "signup"
+      ? "Create your account with the email your manager set up for you."
+      : "Sign in to your account.";
+    document.getElementById("auth-submit-btn").textContent = mode === "signup" ? "Create Account" : "Sign In";
+    document.getElementById("auth-toggle-text").textContent = mode === "signup" ? "Already have an account?" : "New here?";
+    document.getElementById("auth-toggle-btn").textContent = mode === "signup" ? "Sign in" : "Create an account";
+    document.getElementById("auth-password").setAttribute("autocomplete", mode === "signup" ? "new-password" : "current-password");
+    showAuthError("");
+  }
+  document.getElementById("auth-toggle-btn").addEventListener("click", () => setAuthMode(authMode === "signin" ? "signup" : "signin"));
+
+  function friendlyAuthError(code){
+    const map = {
+      "auth/invalid-email": "That doesn't look like a valid email address.",
+      "auth/invalid-credential": "Email or password is incorrect.",
+      "auth/wrong-password": "Email or password is incorrect.",
+      "auth/user-not-found": "No account found for that email. Tap “Create an account” if you're new.",
+      "auth/email-already-in-use": "An account with that email already exists — try signing in instead.",
+      "auth/weak-password": "Password should be at least 6 characters.",
+      "auth/too-many-requests": "Too many attempts — please wait a minute and try again.",
+      "auth/network-request-failed": "Network problem — check your connection and try again."
+    };
+    return map[code] || "Something went wrong. Please try again.";
+  }
+
+  document.getElementById("auth-submit-btn").addEventListener("click", async () => {
+    const email = document.getElementById("auth-email").value.trim();
+    const password = document.getElementById("auth-password").value;
+    if (!email || !password){ showAuthError("Please enter your email and password."); return; }
+    const btn = document.getElementById("auth-submit-btn");
+    btn.disabled = true; btn.textContent = authMode === "signup" ? "Creating…" : "Signing in…";
+    showAuthError("");
+    try{
+      if (authMode === "signup") await auth.createUserWithEmailAndPassword(email, password);
+      else await auth.signInWithEmailAndPassword(email, password);
+      // onAuthStateChanged takes over from here.
+    }catch(err){
+      showAuthError(friendlyAuthError(err.code));
+      btn.disabled = false; btn.textContent = authMode === "signup" ? "Create Account" : "Sign In";
+    }
+  });
+
+  document.getElementById("signout-btn").addEventListener("click", () => { if (auth) auth.signOut(); });
+
+  // Load (or create) the signed-in user's role doc, then reveal the app.
+  async function resolveRoleAndEnter(user){
+    const ref = db.collection("users").doc(user.uid);
+    let role = "unassigned";
+    try{
+      const snap = await ref.get();
+      if (snap.exists){
+        role = snap.data().role || "unassigned";
+      } else {
+        // First time this account signs in — self-provision as unassigned.
+        await ref.set({ email: (user.email||"").toLowerCase(), role: "unassigned", createdAt: Date.now() });
+      }
+      // Bootstrap: the owner email is always a manager, promoted on first login.
+      if ((user.email||"").toLowerCase() === OWNER_EMAIL && role !== "manager"){
+        await ref.set({ role: "manager", email: (user.email||"").toLowerCase() }, { merge: true });
+        role = "manager";
+      }
+    }catch(err){
+      console.error("role lookup failed", err);
+      showAuthError("Couldn't load your access — check your connection and try again.");
+      auth.signOut();
+      return;
+    }
+    currentRole = role;
+    enterApp();
+  }
+
+  function enterApp(){
+    const btn = document.getElementById("auth-submit-btn");
+    btn.disabled = false; btn.textContent = "Sign In";
+    document.getElementById("auth-password").value = "";
+
+    if (currentRole === "unassigned"){
+      // Signed in, but no role yet — hold at a friendly waiting screen.
+      authScreen.style.display = "flex";
+      appEl.style.display = "none";
+      document.getElementById("auth-pending").style.display = "block";
+      document.getElementById("auth-pending").innerHTML =
+        "You're signed in as <b>" + escapeHtml(currentUser.email||"") + "</b>, but a manager hasn't set your role yet.<br><br>Ask your manager to add you from the <b>Manage Crew</b> screen, then reopen the app.";
+      return;
+    }
+    document.getElementById("auth-pending").style.display = "none";
+    authScreen.style.display = "none";
+    appEl.style.display = "flex";
+    document.getElementById("header-user").style.display = "flex";
+    document.getElementById("role-chip").textContent = ROLE_LABELS[currentRole] || currentRole;
+    applyRolePermissions();
+    if (can.manageJobs()) loadJobs();
+    if (can.manageDrops()) loadDrops();
+  }
+
+  function showLogin(){
+    currentUser = null; currentRole = null;
+    authScreen.style.display = "flex";
+    appEl.style.display = "none";
+    document.getElementById("auth-pending").style.display = "none";
+    document.getElementById("header-user").style.display = "none";
+    setAuthMode("signin");
+  }
+
+  if (isConfigured){
+    appEl.style.display = "none"; // stay hidden until we know who's signed in
+    auth.onAuthStateChanged((user) => {
+      currentUser = user;
+      if (user) resolveRoleAndEnter(user);
+      else showLogin();
+    });
   }
 
   // ---------------- Connection status ----------------
@@ -479,14 +685,43 @@
 
   // ---------------- Tabs ----------------
   const tabBtns = document.querySelectorAll(".tab-btn");
-  tabBtns.forEach(btn => {
-    btn.addEventListener("click", () => {
-      tabBtns.forEach(b => b.classList.remove("active"));
-      btn.classList.add("active");
-      document.querySelectorAll(".view").forEach(v => v.classList.remove("active"));
-      document.getElementById("view-" + btn.dataset.tab).classList.add("active");
-    });
-  });
+  function activateTab(name){
+    tabBtns.forEach(b => b.classList.toggle("active", b.dataset.tab === name));
+    document.querySelectorAll(".view").forEach(v => v.classList.remove("active"));
+    document.getElementById("view-" + name).classList.add("active");
+  }
+  tabBtns.forEach(btn => btn.addEventListener("click", () => activateTab(btn.dataset.tab)));
+
+  // Show/hide features per role. Manager = everything; Technician = Open jobs
+  // only; Semi Driver = Load Drops only. (The database rules enforce this for
+  // real — this just keeps the UI honest.)
+  function applyRolePermissions(){
+    const mgr = can.isManager();
+    const jobs = can.manageJobs();   // manager or technician
+    const drops = can.manageDrops(); // manager or semi driver
+
+    document.getElementById("crew-btn").style.display = mgr ? "" : "none";
+    document.getElementById("tab-install").classList.toggle("hidden-by-role", !jobs);
+    document.getElementById("tab-drops").classList.toggle("hidden-by-role", !drops);
+    // With only one tab available, the toggle bar just shows that one.
+    document.getElementById("job-tabs").style.display = (jobs && drops) ? "" : "none";
+
+    // Only managers get Upcoming / Completed sub-tabs and the exports.
+    document.getElementById("subtab-upcoming").classList.toggle("hidden-by-role", !mgr);
+    document.getElementById("subtab-completed").classList.toggle("hidden-by-role", !mgr);
+    document.getElementById("btn-export-jobs").classList.toggle("hidden-by-role", !mgr);
+    document.getElementById("btn-export-drops").classList.toggle("hidden-by-role", !mgr);
+
+    // Non-managers are pinned to the Open sub-tab.
+    if (!mgr && currentJobFilter !== "open"){
+      currentJobFilter = "open";
+      document.querySelectorAll(".subtab-btn").forEach(b => b.classList.toggle("active", b.dataset.jobfilter === "open"));
+    }
+    updateNewJobButton();
+
+    // Land on the tab that fits the role.
+    activateTab(jobs ? "install" : "drops");
+  }
 
   // ==================================================
   // INSTALL JOBS
@@ -532,7 +767,7 @@
     document.getElementById("f-notes").value = job ? job.notes : "";
     pendingPhotos = job && job.photos ? job.photos.slice() : [];
     renderPhotoGrid();
-    document.getElementById("delete-row").style.display = job ? "block" : "none";
+    document.getElementById("delete-row").style.display = (job && can.isManager()) ? "block" : "none";
     jobSheetBackdrop.classList.add("show");
     jobSheet.classList.add("show");
   }
@@ -791,9 +1026,11 @@
       <div class="detail-photo-grid">${job.photos.map(p => `<img src="${p.url}" data-src="${p.url}">`).join("")}</div>` : `<div class="hint">No photos added yet.</div>`}
       <div class="action-row">
         <button class="btn btn-ghost" id="detail-edit-btn">Edit Job</button>
-        ${jobStatus(job) === "upcoming"
-          ? `<button class="btn btn-primary" id="detail-promote-btn">Move to Open</button>`
-          : `<button class="btn ${isCompleted(job) ? "btn-ghost" : "btn-primary"}" id="detail-complete-btn">${isCompleted(job) ? "Reopen Job" : "Mark Complete"}</button>`}
+        ${can.isManager()
+          ? (jobStatus(job) === "upcoming"
+              ? `<button class="btn btn-primary" id="detail-promote-btn">Move to Open</button>`
+              : `<button class="btn ${isCompleted(job) ? "btn-ghost" : "btn-primary"}" id="detail-complete-btn">${isCompleted(job) ? "Reopen Job" : "Mark Complete"}</button>`)
+          : ""}
       </div>
     `;
     body.querySelectorAll(".detail-photo-grid img").forEach(img => {
@@ -951,9 +1188,9 @@
               <button class="icon-btn copy-btn" data-text="${escapeHtml(d.bigRolls||0)}/${escapeHtml(d.pallets||0)} ${escapeHtml(d.neighborhood)}" title="Copy as text">
                 <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="9" y="9" width="13" height="13" rx="2"/><path d="M5 15H4a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h9a2 2 0 0 1 2 2v1"/></svg>
               </button>
-              <button class="icon-btn del-btn" title="Delete">
+              ${can.isManager() ? `<button class="icon-btn del-btn" title="Delete">
                 <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M3 6h18M8 6V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2m3 0-1 14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2L4 6"/></svg>
-              </button>
+              </button>` : ""}
             </div>
           </div>
         `).join("")}
@@ -995,10 +1232,78 @@
     setTimeout(() => t.classList.remove("show"), 1800);
   }
 
+  // ==================================================
+  // MANAGE CREW (managers only)
+  // ==================================================
+  const crewSheet = document.getElementById("crew-sheet");
+  const crewSheetBackdrop = document.getElementById("crew-sheet-backdrop");
+  function closeCrewSheet(){ crewSheetBackdrop.classList.remove("show"); crewSheet.classList.remove("show"); }
+  document.getElementById("crew-sheet-close").addEventListener("click", closeCrewSheet);
+  crewSheetBackdrop.addEventListener("click", closeCrewSheet);
+  document.getElementById("crew-btn").addEventListener("click", openCrewSheet);
+
+  async function openCrewSheet(){
+    if (!can.isManager()) return;
+    crewSheetBackdrop.classList.add("show");
+    crewSheet.classList.add("show");
+    const listEl = document.getElementById("crew-list");
+    listEl.innerHTML = `<div class="loading-row"><div class="spinner"></div>Loading crew…</div>`;
+    let users = [];
+    try{
+      const snap = await db.collection("users").orderBy("email").get();
+      users = snap.docs.map(d => ({ uid: d.id, email: d.data().email || "", role: d.data().role || "unassigned" }));
+    }catch(err){
+      console.error(err);
+      listEl.innerHTML = `<div class="empty"><div class="icon">⚠</div><h3>Couldn't load crew</h3><p>Check your connection and try again.</p></div>`;
+      return;
+    }
+    renderCrewList(users);
+  }
+
+  const CREW_ROLE_OPTIONS = [["unassigned","Pending (no access)"],["technician","Technician"],["semi","Semi Driver"],["manager","Manager"]];
+  function renderCrewList(users){
+    const listEl = document.getElementById("crew-list");
+    if (!users.length){ listEl.innerHTML = `<div class="hint">No one has signed up yet. Have your crew open the app and create an account, then set their role here.</div>`; return; }
+    listEl.innerHTML = users.map(u => {
+      const isSelf = u.uid === currentUser.uid;
+      return `
+      <div class="crew-row" data-uid="${u.uid}">
+        <div class="who">
+          <div class="email">${escapeHtml(u.email || "(no email)")}</div>
+          ${isSelf ? `<div class="you">This is you</div>` : ""}
+        </div>
+        <select ${isSelf ? "disabled" : ""}>
+          ${CREW_ROLE_OPTIONS.map(([v,l]) => `<option value="${v}"${u.role===v?" selected":""}>${l}</option>`).join("")}
+        </select>
+      </div>`;
+    }).join("");
+    listEl.querySelectorAll(".crew-row").forEach(row => {
+      const uid = row.dataset.uid;
+      const sel = row.querySelector("select");
+      if (!sel || sel.disabled) return;
+      sel.addEventListener("change", async () => {
+        const newRole = sel.value;
+        sel.disabled = true;
+        try{
+          await db.collection("users").doc(uid).update({ role: newRole });
+          showToast("Role updated");
+        }catch(err){
+          console.error(err);
+          alert("Couldn't update role — check your connection and try again.");
+        }
+        sel.disabled = false;
+      });
+    });
+  }
+
   // ---------------- Init ----------------
-  updateNewJobButton();
-  loadJobs();
-  loadDrops();
+  // Data loads once a user signs in and their role resolves (see enterApp).
+  // If Firebase isn't configured, just show the setup notice + empty app.
+  if (!isConfigured){
+    updateNewJobButton();
+    loadJobs();
+    loadDrops();
+  }
 })();
 </script>
 </body>
