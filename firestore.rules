@@ -1,0 +1,56 @@
+rules_version = '2';
+
+// Role-based rules for the Sod Job Tracker.
+// Each signed-in user has a doc at users/{uid} with a `role`:
+//   "manager" | "technician" | "semi" | "unassigned"
+// - Managers: full access to jobs, drops, and crew roles.
+// - Technicians: read + create/edit OPEN jobs only (no delete, no drops).
+// - Semi drivers: read + create drops only (no delete, no jobs).
+// - Unassigned / signed-out: no access to data.
+service cloud.firestore {
+  match /databases/{database}/documents {
+
+    function signedIn() { return request.auth != null; }
+    function myRole() {
+      return signedIn() && exists(/databases/$(database)/documents/users/$(request.auth.uid))
+        ? get(/databases/$(database)/documents/users/$(request.auth.uid)).data.role
+        : "none";
+    }
+    // The owner email is always a manager (bootstrap on first login).
+    function isOwner()    { return signedIn() && request.auth.token.email == "soonersod@gmail.com"; }
+    function isManager()  { return myRole() == "manager" || isOwner(); }
+    function canSeeJobs() { return myRole() == "manager" || myRole() == "technician"; }
+    function canSeeDrops(){ return myRole() == "manager" || myRole() == "semi"; }
+    // A job doc counts as "open" if its status is "open" or missing (legacy).
+    function docIsOpen(d) { return !("status" in d) || d.status == "open"; }
+
+    match /jobs/{jobId} {
+      allow read:   if canSeeJobs();
+      // Managers can create any status; technicians can only create Open jobs.
+      allow create: if canSeeJobs() && request.resource.data.size() <= 60
+                    && (isManager() || request.resource.data.status == "open");
+      // Managers can edit anything; technicians can only edit an Open job and
+      // must leave it Open (so they can't complete, reopen, or schedule).
+      allow update: if canSeeJobs() && request.resource.data.size() <= 60
+                    && (isManager() || (docIsOpen(resource.data) && request.resource.data.status == "open"));
+      allow delete: if isManager();
+    }
+
+    match /drops/{dropId} {
+      allow read:          if canSeeDrops();
+      allow create, update:if canSeeDrops() && request.resource.data.size() <= 60;
+      allow delete:        if isManager();
+    }
+
+    match /users/{uid} {
+      // A user can read their own role; managers can read everyone (crew list).
+      allow get:  if signedIn() && (request.auth.uid == uid || isManager());
+      allow list: if isManager();
+      // New sign-ups self-provision their own doc as "unassigned" only.
+      allow create: if signedIn() && uid == request.auth.uid
+                    && request.resource.data.role == "unassigned";
+      // Only managers change roles or remove people.
+      allow update, delete: if isManager();
+    }
+  }
+}
