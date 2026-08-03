@@ -1,0 +1,29 @@
+rules_version = '2';
+
+// Photo storage rules. Photos live under jobs/<jobId>/<photo>.jpg.
+// Only signed-in managers/technicians (the roles that work with jobs) can
+// upload or delete photos; any signed-in user can view them. Uploads are
+// capped at 10 MB and must be images.
+service firebase.storage {
+  match /b/{bucket}/o {
+
+    function signedIn() { return request.auth != null; }
+    function role() {
+      return signedIn() && firestore.exists(/databases/(default)/documents/users/$(request.auth.uid))
+        ? firestore.get(/databases/(default)/documents/users/$(request.auth.uid)).data.role
+        : "none";
+    }
+    function isOwner() { return signedIn() && request.auth.token.email == "soonersod@gmail.com"; }
+    function canJobs() { return isOwner() || role() == "manager" || role() == "technician"; }
+
+    match /jobs/{jobId}/{photo} {
+      allow read: if signedIn();
+      allow create, update: if canJobs()
+                            && request.resource.size < 10 * 1024 * 1024
+                            && request.resource.contentType.matches('image/.*');
+      allow delete: if canJobs();
+    }
+
+    // Anything not matched above is denied.
+  }
+}
