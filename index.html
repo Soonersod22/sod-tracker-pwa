@@ -275,12 +275,18 @@
   .crew-row .email{font-size:14px; font-weight:600; word-break:break-all;}
   .crew-row .you{font-size:11.5px; color:var(--turf-accent); font-weight:700;}
   .crew-row select{border:1.5px solid var(--line); border-radius:9px; padding:8px 10px; font-size:14px; font-family:inherit; background:var(--card); color:var(--ink); flex-shrink:0;}
+  .crew-row .crew-name{margin-top:6px; width:100%; padding:7px 9px; border:1.5px solid var(--line); border-radius:8px; font-size:13.5px; font-family:inherit; background:var(--card); color:var(--ink);}
   .pin-card{background:var(--card); border:1px solid var(--line); border-radius:12px; box-shadow:var(--shadow); padding:4px 6px 4px 4px; margin-bottom:10px; display:flex; align-items:center; gap:6px;}
   .pin-card a.pin-open{flex:1; min-width:0; display:flex; align-items:center; gap:11px; text-decoration:none; color:var(--ink); padding:12px 10px; border-radius:10px;}
   .pin-card a.pin-open:active{background:#EFEAE0;}
   .pin-card .pin-open svg{color:var(--soil); flex-shrink:0;}
   .pin-card .pin-name{font-weight:700; font-size:15.5px; white-space:nowrap; overflow:hidden; text-overflow:ellipsis;}
   .pin-card .pin-edit{border:1px solid var(--line); background:var(--cream); color:var(--ink-soft); border-radius:8px; padding:8px 12px; font-size:13px; font-weight:650; cursor:pointer; font-family:inherit; flex-shrink:0;}
+  .pw-wrap{position:relative;}
+  .pw-wrap input{padding-right:64px;}
+  .pw-toggle{position:absolute; right:8px; top:50%; transform:translateY(-50%); border:none; background:transparent; color:var(--turf); font-weight:700; font-size:13px; cursor:pointer; font-family:inherit; padding:6px 8px;}
+  .auth-error.ok{background:var(--turf-light); color:var(--turf);}
+  .logged-by{font-size:12px; color:var(--ink-soft); margin-top:8px;}
 </style>
 </head>
 <body>
@@ -289,8 +295,16 @@
   <div class="auth-card">
     <div class="auth-brand"><span class="mark">S</span><h1>Sod Job Tracker</h1></div>
     <p class="auth-sub" id="auth-sub">Sign in to your account.</p>
+    <div class="field" id="auth-name-field" style="display:none;"><label>Your name</label><input id="auth-name" placeholder="e.g. Mike Rivera"></div>
     <div class="field"><label>Email</label><input id="auth-email" type="email" autocomplete="username" placeholder="you@company.com"></div>
-    <div class="field"><label>Password</label><input id="auth-password" type="password" autocomplete="current-password" placeholder="Your password"></div>
+    <div class="field">
+      <label>Password</label>
+      <div class="pw-wrap">
+        <input id="auth-password" type="password" autocomplete="current-password" placeholder="Your password">
+        <button type="button" class="pw-toggle" id="auth-pw-toggle">Show</button>
+      </div>
+    </div>
+    <button class="auth-link" id="auth-forgot-btn" style="display:block; margin:-4px 0 12px 0;">Forgot password?</button>
     <div id="auth-error" class="auth-error" style="display:none;"></div>
     <button class="btn btn-primary btn-block" id="auth-submit-btn">Sign In</button>
     <p style="text-align:center; margin:14px 0 0 0; font-size:13.5px; color:var(--ink-soft);">
@@ -515,6 +529,8 @@
   const OWNER_EMAIL = "soonersod@gmail.com";
   let currentUser = null;   // firebase user
   let currentRole = null;   // resolved role string
+  let currentName = "";     // display name for "logged by" attribution
+  function actorLabel(){ return currentName || (currentUser && currentUser.email) || "Someone"; }
   const ROLE_LABELS = { manager: "Manager", technician: "Technician", semi: "Semi Driver", unassigned: "Pending" };
   const can = {
     manageJobs: () => currentRole === "manager" || currentRole === "technician",
@@ -526,9 +542,10 @@
   const appEl = document.querySelector(".app");
   let authMode = "signin"; // "signin" | "signup"
 
-  function showAuthError(msg){
+  function showAuthError(msg, ok){
     const el = document.getElementById("auth-error");
     el.textContent = msg; el.style.display = msg ? "block" : "none";
+    el.classList.toggle("ok", !!ok);
   }
   function setAuthMode(mode){
     authMode = mode;
@@ -539,9 +556,31 @@
     document.getElementById("auth-toggle-text").textContent = mode === "signup" ? "Already have an account?" : "New here?";
     document.getElementById("auth-toggle-btn").textContent = mode === "signup" ? "Sign in" : "Create an account";
     document.getElementById("auth-password").setAttribute("autocomplete", mode === "signup" ? "new-password" : "current-password");
+    document.getElementById("auth-name-field").style.display = mode === "signup" ? "block" : "none";
+    document.getElementById("auth-forgot-btn").style.display = mode === "signup" ? "none" : "block";
     showAuthError("");
   }
   document.getElementById("auth-toggle-btn").addEventListener("click", () => setAuthMode(authMode === "signin" ? "signup" : "signin"));
+
+  // Show / hide the password.
+  document.getElementById("auth-pw-toggle").addEventListener("click", () => {
+    const inp = document.getElementById("auth-password");
+    const show = inp.type === "password";
+    inp.type = show ? "text" : "password";
+    document.getElementById("auth-pw-toggle").textContent = show ? "Hide" : "Show";
+  });
+
+  // Forgot password — sends a reset email (only works for real inboxes).
+  document.getElementById("auth-forgot-btn").addEventListener("click", async () => {
+    const email = document.getElementById("auth-email").value.trim();
+    if (!email){ showAuthError("Enter your email above, then tap Forgot password."); return; }
+    try{
+      await auth.sendPasswordResetEmail(email);
+      showAuthError("Password reset email sent to " + email + " — check your inbox (and spam).", true);
+    }catch(err){
+      showAuthError(friendlyAuthError(err.code));
+    }
+  });
 
   function friendlyAuthError(code){
     const map = {
@@ -574,19 +613,26 @@
     }
   });
 
-  document.getElementById("signout-btn").addEventListener("click", () => { if (auth) auth.signOut(); });
+  document.getElementById("signout-btn").addEventListener("click", () => {
+    if (!auth) return;
+    if (confirm("Sign out? You'll need your email and password to sign back in.")) auth.signOut();
+  });
 
   // Load (or create) the signed-in user's role doc, then reveal the app.
   async function resolveRoleAndEnter(user){
     const ref = db.collection("users").doc(user.uid);
     let role = "unassigned";
+    let name = "";
     try{
       const snap = await ref.get();
       if (snap.exists){
         role = snap.data().role || "unassigned";
+        name = snap.data().name || "";
       } else {
-        // First time this account signs in — self-provision as unassigned.
-        await ref.set({ email: (user.email||"").toLowerCase(), role: "unassigned", createdAt: Date.now() });
+        // First time this account signs in — self-provision as unassigned,
+        // capturing the name they typed on the sign-up form (if any).
+        name = (document.getElementById("auth-name").value || "").trim();
+        await ref.set({ email: (user.email||"").toLowerCase(), name: name, role: "unassigned", createdAt: Date.now() });
       }
       // Bootstrap: the owner email is always a manager, promoted on first login.
       if ((user.email||"").toLowerCase() === OWNER_EMAIL && role !== "manager"){
@@ -600,6 +646,7 @@
       return;
     }
     currentRole = role;
+    currentName = name;
     enterApp();
   }
 
@@ -921,6 +968,8 @@
       photos: pendingPhotos.filter(p => !p.uploading),
       status: existing && existing.status ? existing.status : creatingStatus,
       completedAt: existing && existing.completedAt ? existing.completedAt : null,
+      completedByName: existing && existing.completedByName ? existing.completedByName : "",
+      createdByName: existing && existing.createdByName ? existing.createdByName : actorLabel(),
       createdAt: existing ? existing.createdAt : Date.now(),
       updatedAt: Date.now()
     };
@@ -1062,6 +1111,7 @@
       <div class="section-lbl">Photos (${(job.photos||[]).length})</div>
       ${job.photos && job.photos.length ? `
       <div class="detail-photo-grid">${job.photos.map(p => `<img src="${p.url}" data-src="${p.url}">`).join("")}</div>` : `<div class="hint">No photos added yet.</div>`}
+      ${(job.createdByName || job.completedByName) ? `<div class="logged-by">${job.createdByName ? "Added by " + escapeHtml(job.createdByName) : ""}${job.completedByName ? (job.createdByName ? " · " : "") + "Completed by " + escapeHtml(job.completedByName) : ""}</div>` : ""}
       <div class="action-row">
         <button class="btn btn-ghost" id="detail-edit-btn">Edit Job</button>
         ${can.isManager()
@@ -1124,6 +1174,7 @@
       await db.collection("jobs").doc(job.id).update({
         status: completing ? "completed" : "open",
         completedAt: completing ? Date.now() : null,
+        completedByName: completing ? actorLabel() : "",
         updatedAt: Date.now()
       });
     }catch(err){
@@ -1156,7 +1207,7 @@
 
     const btn = document.getElementById("btn-add-drop");
     btn.disabled = true; btn.textContent = "Logging…";
-    const drop = { id: uid("drop"), neighborhood: hood, bigRolls: rolls, pallets: pallets, note, timestamp: Date.now() };
+    const drop = { id: uid("drop"), neighborhood: hood, bigRolls: rolls, pallets: pallets, note, createdByName: actorLabel(), timestamp: Date.now() };
     try{
       await db.collection("drops").doc(drop.id).set(drop);
     }catch(err){
@@ -1219,7 +1270,7 @@
               <div class="badge">${d.bigRolls||0}/${d.pallets||0}</div>
               <div class="info">
                 <div class="hood">${escapeHtml(d.neighborhood)}</div>
-                <div class="time">${new Date(d.timestamp).toLocaleTimeString(undefined,{hour:'numeric',minute:'2-digit'})}${d.note ? " · " + escapeHtml(d.note) : ""}</div>
+                <div class="time">${new Date(d.timestamp).toLocaleTimeString(undefined,{hour:'numeric',minute:'2-digit'})}${d.createdByName ? " · " + escapeHtml(d.createdByName) : ""}${d.note ? " · " + escapeHtml(d.note) : ""}</div>
               </div>
             </div>
             <div class="actions">
@@ -1289,7 +1340,7 @@
     let users = [];
     try{
       const snap = await db.collection("users").orderBy("email").get();
-      users = snap.docs.map(d => ({ uid: d.id, email: d.data().email || "", role: d.data().role || "unassigned" }));
+      users = snap.docs.map(d => ({ uid: d.id, email: d.data().email || "", role: d.data().role || "unassigned", name: d.data().name || "" }));
     }catch(err){
       console.error(err);
       listEl.innerHTML = `<div class="empty"><div class="icon">⚠</div><h3>Couldn't load crew</h3><p>Check your connection and try again.</p></div>`;
@@ -1307,8 +1358,8 @@
       return `
       <div class="crew-row" data-uid="${u.uid}">
         <div class="who">
-          <div class="email">${escapeHtml(u.email || "(no email)")}</div>
-          ${isSelf ? `<div class="you">This is you</div>` : ""}
+          <div class="email">${escapeHtml(u.email || "(no email)")}${isSelf ? ` <span class="you">(you)</span>` : ""}</div>
+          <input class="crew-name" placeholder="Name (shown on their entries)" value="${escapeHtml(u.name || "")}">
         </div>
         <select ${isSelf ? "disabled" : ""}>
           ${CREW_ROLE_OPTIONS.map(([v,l]) => `<option value="${v}"${u.role===v?" selected":""}>${l}</option>`).join("")}
@@ -1318,19 +1369,28 @@
     listEl.querySelectorAll(".crew-row").forEach(row => {
       const uid = row.dataset.uid;
       const sel = row.querySelector("select");
-      if (!sel || sel.disabled) return;
-      sel.addEventListener("change", async () => {
-        const newRole = sel.value;
-        sel.disabled = true;
-        try{
-          await db.collection("users").doc(uid).update({ role: newRole });
-          showToast("Role updated");
-        }catch(err){
-          console.error(err);
-          alert("Couldn't update role — check your connection and try again.");
-        }
-        sel.disabled = false;
-      });
+      if (sel && !sel.disabled){
+        sel.addEventListener("change", async () => {
+          const newRole = sel.value;
+          sel.disabled = true;
+          try{ await db.collection("users").doc(uid).update({ role: newRole }); showToast("Role updated"); }
+          catch(err){ console.error(err); alert("Couldn't update role — check your connection and try again."); }
+          sel.disabled = false;
+        });
+      }
+      const nameInput = row.querySelector(".crew-name");
+      if (nameInput){
+        nameInput.addEventListener("change", async () => {
+          const newName = nameInput.value.trim();
+          nameInput.disabled = true;
+          try{
+            await db.collection("users").doc(uid).update({ name: newName });
+            if (uid === currentUser.uid) currentName = newName; // keep own attribution fresh
+            showToast("Name saved");
+          }catch(err){ console.error(err); alert("Couldn't save name — check your connection and try again."); }
+          nameInput.disabled = false;
+        });
+      }
     });
   }
 
