@@ -118,6 +118,7 @@
   }
   .job-card .row1{display:flex; justify-content:space-between; align-items:flex-start; gap:10px;}
   .job-card .addr{font-weight:700; font-size:15.5px; line-height:1.3;}
+  .subdiv{display:inline-block; font-size:11px; font-weight:800; letter-spacing:.04em; text-transform:uppercase; color:var(--soil); background:#F1E7DA; padding:3px 9px; border-radius:6px; margin-bottom:5px;}
   .job-card .lot{color:var(--ink-soft); font-size:13px; margin-top:2px;}
   .job-card .stats{display:flex; gap:8px; margin-top:10px; flex-wrap:wrap;}
   .pill{font-size:12.5px; font-weight:650; padding:4px 10px; border-radius:20px; background:var(--turf-light); color:var(--turf);}
@@ -365,7 +366,7 @@
       </div>
       <div class="search-wrap">
         <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="11" cy="11" r="7"/><line x1="21" y1="21" x2="16.65" y2="16.65"/></svg>
-        <input id="job-search" placeholder="Search by address or lot #">
+        <input id="job-search" placeholder="Search by subdivision, address, or lot #">
       </div>
       <div id="job-list"></div>
     </section>
@@ -412,7 +413,8 @@
     <button class="close-x" id="job-sheet-close">✕</button>
   </div>
   <div class="sheet-body">
-    <div class="field"><label>Address *</label><input id="f-address" placeholder="123 Oak St, Selah Meadows"></div>
+    <div class="field"><label>Subdivision</label><input id="f-subdivision" placeholder="e.g. Selah Meadows"></div>
+    <div class="field"><label>Address *</label><input id="f-address" placeholder="123 Oak St"></div>
     <div class="field-row"><div class="field"><label>Lot #</label><input id="f-lot" placeholder="Optional"></div></div>
     <div class="field-row">
       <div class="field"><label>Big Rolls</label><input id="f-rolls" type="number" inputmode="numeric" placeholder="0"></div>
@@ -856,6 +858,7 @@
     editingJobId = job ? job.id : null;
     document.getElementById("job-sheet-title").textContent = job ? "Edit Job" : "New Job";
     document.getElementById("f-address").value = job ? job.address : "";
+    document.getElementById("f-subdivision").value = job ? (job.subdivision || "") : "";
     document.getElementById("f-lot").value = job ? job.lot : "";
     document.getElementById("f-rolls").value = job ? job.bigRolls : "";
     document.getElementById("f-pallets").value = job ? job.pallets : "";
@@ -979,6 +982,7 @@
     const job = {
       id: jobId,
       address,
+      subdivision: document.getElementById("f-subdivision").value.trim(),
       lot: document.getElementById("f-lot").value.trim(),
       bigRolls: document.getElementById("f-rolls").value || "0",
       pallets: document.getElementById("f-pallets").value || "0",
@@ -1046,7 +1050,7 @@
     let list = jobsCache.filter(j => jobStatus(j) === currentJobFilter);
     // Completed jobs read best newest-finished-first.
     if (currentJobFilter === "completed") list = list.slice().sort((a,b) => (b.completedAt||b.createdAt||0) - (a.completedAt||a.createdAt||0));
-    const filtered = list.filter(j => !q || (j.address||"").toLowerCase().includes(q) || (j.lot||"").toLowerCase().includes(q));
+    const filtered = list.filter(j => !q || (j.address||"").toLowerCase().includes(q) || (j.lot||"").toLowerCase().includes(q) || (j.subdivision||"").toLowerCase().includes(q));
 
     if (filtered.length === 0){
       const noneYet = list.length === 0;
@@ -1070,6 +1074,7 @@
       <div class="job-card${st === "completed" ? " completed" : ""}" data-id="${j.id}">
         <div class="row1">
           <div>
+            ${j.subdivision ? `<div class="subdiv">${escapeHtml(j.subdivision)}</div>` : ""}
             <div class="addr">${escapeHtml(j.address)}</div>
             ${j.lot ? `<div class="lot">Lot ${escapeHtml(j.lot)}</div>` : ""}
           </div>
@@ -1095,9 +1100,9 @@
   document.getElementById("job-search").addEventListener("input", renderJobList);
 
   document.getElementById("btn-export-jobs").addEventListener("click", () => {
-    const rows = [["Address","Lot #","Big Rolls","Pallets","Sq Ft","Maps Link","Notes","Photo Count","Status","Created","Completed"]];
+    const rows = [["Subdivision","Address","Lot #","Big Rolls","Pallets","Sq Ft","Maps Link","Notes","Photo Count","Status","Created","Completed"]];
     jobsCache.forEach(j => rows.push([
-      j.address, j.lot||"", j.bigRolls||0, j.pallets||0, jobSqFt(j), j.mapsLink||"", j.notes||"",
+      j.subdivision||"", j.address, j.lot||"", j.bigRolls||0, j.pallets||0, jobSqFt(j), j.mapsLink||"", j.notes||"",
       (j.photos||[]).length, jobStatus(j).charAt(0).toUpperCase() + jobStatus(j).slice(1),
       new Date(j.createdAt).toLocaleDateString(),
       j.completedAt ? new Date(j.completedAt).toLocaleDateString() : ""
@@ -1115,6 +1120,7 @@
     const body = document.getElementById("detail-body");
     body.innerHTML = `
       <div class="detail-hero">
+        ${job.subdivision ? `<div class="subdiv">${escapeHtml(job.subdivision)}</div>` : ""}
         <div class="addr">${escapeHtml(job.address)}</div>
         ${job.lot ? `<div class="lot">Lot ${escapeHtml(job.lot)}</div>` : ""}
         ${isCompleted(job) ? `<div class="lot" style="color:var(--turf); font-weight:700;">✓ Completed${job.completedAt ? " · " + new Date(job.completedAt).toLocaleDateString(undefined,{month:'short',day:'numeric',year:'numeric'}) : ""}</div>` : ""}
