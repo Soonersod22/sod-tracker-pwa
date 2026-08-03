@@ -82,6 +82,7 @@
   .tab-btn .dot{width:7px;height:7px;border-radius:50%;}
   .tab-btn[data-tab="install"] .dot{background:var(--turf-accent);}
   .tab-btn[data-tab="drops"] .dot{background:var(--hauler-accent);}
+  .tab-btn[data-tab="places"] .dot{background:var(--soil);}
 
   main{flex:1; padding:16px 16px 90px 16px;}
   .view{display:none;}
@@ -274,6 +275,12 @@
   .crew-row .email{font-size:14px; font-weight:600; word-break:break-all;}
   .crew-row .you{font-size:11.5px; color:var(--turf-accent); font-weight:700;}
   .crew-row select{border:1.5px solid var(--line); border-radius:9px; padding:8px 10px; font-size:14px; font-family:inherit; background:var(--card); color:var(--ink); flex-shrink:0;}
+  .pin-card{background:var(--card); border:1px solid var(--line); border-radius:12px; box-shadow:var(--shadow); padding:4px 6px 4px 4px; margin-bottom:10px; display:flex; align-items:center; gap:6px;}
+  .pin-card a.pin-open{flex:1; min-width:0; display:flex; align-items:center; gap:11px; text-decoration:none; color:var(--ink); padding:12px 10px; border-radius:10px;}
+  .pin-card a.pin-open:active{background:#EFEAE0;}
+  .pin-card .pin-open svg{color:var(--soil); flex-shrink:0;}
+  .pin-card .pin-name{font-weight:700; font-size:15.5px; white-space:nowrap; overflow:hidden; text-overflow:ellipsis;}
+  .pin-card .pin-edit{border:1px solid var(--line); background:var(--cream); color:var(--ink-soft); border-radius:8px; padding:8px 12px; font-size:13px; font-weight:650; cursor:pointer; font-family:inherit; flex-shrink:0;}
 </style>
 </head>
 <body>
@@ -325,6 +332,7 @@
     <div class="tabs" id="job-tabs">
       <button class="tab-btn active" data-tab="install" id="tab-install"><span class="dot"></span>Install Jobs</button>
       <button class="tab-btn" data-tab="drops" id="tab-drops"><span class="dot"></span>Load Drops</button>
+      <button class="tab-btn" data-tab="places" id="tab-places"><span class="dot"></span>Places</button>
     </div>
   </header>
 
@@ -366,6 +374,17 @@
         <button class="btn btn-ghost btn-block" id="btn-export-drops" title="Export to CSV">⬇ Export Drops CSV</button>
       </div>
       <div id="drop-list"></div>
+    </section>
+
+    <section id="view-places" class="view">
+      <div class="fab-row">
+        <button class="btn btn-primary btn-block" id="btn-new-pin">+ Add Place</button>
+      </div>
+      <div class="search-wrap">
+        <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="11" cy="11" r="7"/><line x1="21" y1="21" x2="16.65" y2="16.65"/></svg>
+        <input id="pin-search" placeholder="Search places by name">
+      </div>
+      <div id="pin-list"></div>
     </section>
   </main>
 </div>
@@ -419,6 +438,23 @@
   <div class="sheet-body">
     <p class="hint" style="margin-bottom:14px;">Set each person's role. They sign in with the email they created their account with. New sign-ups appear here as <b>Pending</b> until you give them a role.</p>
     <div id="crew-list"><div class="loading-row"><div class="spinner"></div>Loading crew…</div></div>
+  </div>
+</div>
+
+<div class="sheet-backdrop" id="pin-sheet-backdrop"></div>
+<div class="sheet" id="pin-sheet">
+  <div class="sheet-header"><h2 id="pin-sheet-title">Add Place</h2><button class="close-x" id="pin-sheet-close">✕</button></div>
+  <div class="sheet-body">
+    <div class="field"><label>Name *</label><input id="pin-name" placeholder="e.g. Selah Meadows"></div>
+    <div class="field">
+      <label>Google Maps Pin (link) *</label>
+      <input id="pin-maps" placeholder="Paste Google Maps link">
+      <div class="hint">Open Google Maps, drop a pin, tap Share → Copy Link, paste here.</div>
+    </div>
+    <button class="btn btn-primary btn-block" id="btn-save-pin">Save Place</button>
+    <div id="pin-delete-row" style="margin-top:10px; display:none;">
+      <button class="btn btn-danger btn-block" id="btn-delete-pin">Delete Place</button>
+    </div>
   </div>
 </div>
 
@@ -589,6 +625,7 @@
     applyRolePermissions();
     if (can.manageJobs()) loadJobs();
     if (can.manageDrops()) loadDrops();
+    loadPins(); // available to every signed-in role
   }
 
   function showLogin(){
@@ -703,8 +740,9 @@
     document.getElementById("crew-btn").style.display = mgr ? "" : "none";
     document.getElementById("tab-install").classList.toggle("hidden-by-role", !jobs);
     document.getElementById("tab-drops").classList.toggle("hidden-by-role", !drops);
-    // With only one tab available, the toggle bar just shows that one.
-    document.getElementById("job-tabs").style.display = (jobs && drops) ? "" : "none";
+    // The Places tab is available to every signed-in role, so the tab bar
+    // always shows at least Places plus the role's own tab.
+    document.getElementById("job-tabs").style.display = "";
 
     // Only managers get Upcoming / Completed sub-tabs and the exports.
     document.getElementById("subtab-upcoming").classList.toggle("hidden-by-role", !mgr);
@@ -1292,6 +1330,106 @@
           alert("Couldn't update role — check your connection and try again.");
         }
         sel.disabled = false;
+      });
+    });
+  }
+
+  // ==================================================
+  // PLACES (saved Google Maps pins) — available to every role
+  // ==================================================
+  let pinsCache = [];
+  let editingPinId = null;
+  const pinListEl = document.getElementById("pin-list");
+  const pinSheet = document.getElementById("pin-sheet");
+  const pinSheetBackdrop = document.getElementById("pin-sheet-backdrop");
+
+  function openPinSheet(pin){
+    editingPinId = pin ? pin.id : null;
+    document.getElementById("pin-sheet-title").textContent = pin ? "Edit Place" : "Add Place";
+    document.getElementById("pin-name").value = pin ? pin.name : "";
+    document.getElementById("pin-maps").value = pin ? pin.mapsLink : "";
+    // Only managers can delete a place.
+    document.getElementById("pin-delete-row").style.display = (pin && can.isManager()) ? "block" : "none";
+    pinSheetBackdrop.classList.add("show");
+    pinSheet.classList.add("show");
+  }
+  function closePinSheet(){ pinSheetBackdrop.classList.remove("show"); pinSheet.classList.remove("show"); }
+  document.getElementById("btn-new-pin").addEventListener("click", () => { if (!isConfigured) return; openPinSheet(null); });
+  document.getElementById("pin-sheet-close").addEventListener("click", closePinSheet);
+  pinSheetBackdrop.addEventListener("click", closePinSheet);
+  document.getElementById("pin-search").addEventListener("input", renderPinList);
+
+  document.getElementById("btn-save-pin").addEventListener("click", async () => {
+    const name = document.getElementById("pin-name").value.trim();
+    const mapsLink = document.getElementById("pin-maps").value.trim();
+    if (!name){ document.getElementById("pin-name").focus(); return; }
+    if (!mapsLink){ document.getElementById("pin-maps").focus(); return; }
+    const btn = document.getElementById("btn-save-pin");
+    btn.disabled = true; btn.textContent = "Saving…";
+    const pinId = editingPinId || uid("pin");
+    const existing = pinsCache.find(p => p.id === pinId);
+    const pin = {
+      id: pinId, name, mapsLink,
+      createdAt: existing ? existing.createdAt : Date.now(),
+      createdBy: existing ? existing.createdBy : ((currentUser && currentUser.email) || ""),
+      updatedAt: Date.now()
+    };
+    try{
+      await db.collection("pins").doc(pinId).set(pin);
+    }catch(err){
+      console.error(err);
+      btn.disabled = false; btn.textContent = "Save Place";
+      alert("Couldn't save — check your connection and try again.");
+      return;
+    }
+    btn.disabled = false; btn.textContent = "Save Place";
+    closePinSheet();
+    loadPins();
+  });
+
+  document.getElementById("btn-delete-pin").addEventListener("click", async () => {
+    if (!editingPinId) return;
+    if (!confirm("Delete this place?")) return;
+    try{ await db.collection("pins").doc(editingPinId).delete(); }
+    catch(err){ console.error(err); alert("Couldn't delete — check your connection and try again."); return; }
+    closePinSheet();
+    loadPins();
+  });
+
+  async function loadPins(){
+    if (!isConfigured) return;
+    pinListEl.innerHTML = `<div class="loading-row"><div class="spinner"></div>Loading places…</div>`;
+    try{
+      const snap = await db.collection("pins").orderBy("name").get();
+      pinsCache = snap.docs.map(d => d.data());
+    }catch(err){
+      console.error(err);
+      pinListEl.innerHTML = `<div class="empty"><div class="icon">⚠</div><h3>Couldn't load places</h3><p>Check your connection and try again.</p></div>`;
+      return;
+    }
+    renderPinList();
+  }
+
+  function renderPinList(){
+    const q = (document.getElementById("pin-search").value || "").toLowerCase().trim();
+    const filtered = pinsCache.filter(p => !q || (p.name||"").toLowerCase().includes(q));
+    if (filtered.length === 0){
+      pinListEl.innerHTML = `<div class="empty"><div class="icon">📍</div><h3>${pinsCache.length===0 ? "No saved places yet" : "No matches"}</h3><p>${pinsCache.length===0 ? "Tap “+ Add Place” to save a Google Maps pin the whole crew can use." : "Try a different search."}</p></div>`;
+      return;
+    }
+    pinListEl.innerHTML = filtered.map(p => `
+      <div class="pin-card" data-id="${p.id}">
+        <a class="pin-open" href="${escapeHtml(p.mapsLink)}" target="_blank" rel="noopener">
+          <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M21 10c0 7-9 13-9 13s-9-6-9-13a9 9 0 0 1 18 0z"/><circle cx="12" cy="10" r="3"/></svg>
+          <span class="pin-name">${escapeHtml(p.name)}</span>
+        </a>
+        <button class="pin-edit" data-id="${p.id}">Edit</button>
+      </div>
+    `).join("");
+    pinListEl.querySelectorAll(".pin-edit").forEach(btn => {
+      btn.addEventListener("click", () => {
+        const pin = pinsCache.find(p => p.id === btn.dataset.id);
+        if (pin) openPinSheet(pin);
       });
     });
   }
