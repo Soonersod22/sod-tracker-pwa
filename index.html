@@ -276,6 +276,8 @@
   .crew-row .you{font-size:11.5px; color:var(--turf-accent); font-weight:700;}
   .crew-row select{border:1.5px solid var(--line); border-radius:9px; padding:8px 10px; font-size:14px; font-family:inherit; background:var(--card); color:var(--ink); flex-shrink:0;}
   .crew-row .crew-name{margin-top:6px; width:100%; padding:7px 9px; border:1.5px solid var(--line); border-radius:8px; font-size:13.5px; font-family:inherit; background:var(--card); color:var(--ink);}
+  .crew-remove{border:none; background:none; color:var(--warn); font-size:12px; font-weight:700; cursor:pointer; font-family:inherit; padding:2px 4px;}
+  .crew-remove:disabled{opacity:0.5;}
   .pin-card{background:var(--card); border:1px solid var(--line); border-radius:12px; box-shadow:var(--shadow); padding:4px 6px 4px 4px; margin-bottom:10px; display:flex; align-items:center; gap:6px;}
   .pin-card a.pin-open{flex:1; min-width:0; display:flex; align-items:center; gap:11px; text-decoration:none; color:var(--ink); padding:12px 10px; border-radius:10px;}
   .pin-card a.pin-open:active{background:#EFEAE0;}
@@ -415,6 +417,10 @@
     <div class="field-row">
       <div class="field"><label>Big Rolls</label><input id="f-rolls" type="number" inputmode="numeric" placeholder="0"></div>
       <div class="field"><label>Pallets</label><input id="f-pallets" type="number" inputmode="numeric" placeholder="0"></div>
+    </div>
+    <div class="field" style="margin-top:-6px;">
+      <div id="f-sqft" style="background:var(--turf-light); color:var(--turf); border-radius:10px; padding:11px 13px; font-weight:700; font-size:15px; text-align:center;">0 sq ft</div>
+      <div class="hint">Auto-calculated: 400 sq ft per big roll + 500 sq ft per pallet.</div>
     </div>
     <div class="field">
       <label>Google Maps Pin (link)</label>
@@ -753,6 +759,11 @@
   // The lifecycle stage of a job: "upcoming" | "open" | "completed".
   // (An "active" job is upcoming OR open — i.e. anything not completed.)
   function jobStatus(j){ return isCompleted(j) ? "completed" : (isUpcoming(j) ? "upcoming" : "open"); }
+  // Square footage: 1 big roll = 400 sq ft, 1 pallet = 500 sq ft. (Change here if these ever change.)
+  const SQFT_PER_ROLL = 400, SQFT_PER_PALLET = 500;
+  function sqFt(bigRolls, pallets){ return (parseInt(bigRolls,10)||0) * SQFT_PER_ROLL + (parseInt(pallets,10)||0) * SQFT_PER_PALLET; }
+  function jobSqFt(j){ return sqFt(j && j.bigRolls, j && j.pallets); }
+  function fmtSqFt(n){ return n.toLocaleString() + " sq ft"; }
   function csvCell(v){
     const s = String(v == null ? "" : v);
     return /[",\n]/.test(s) ? '"' + s.replace(/"/g,'""') + '"' : s;
@@ -852,10 +863,18 @@
     document.getElementById("f-notes").value = job ? job.notes : "";
     pendingPhotos = job && job.photos ? job.photos.slice() : [];
     renderPhotoGrid();
+    updateFormSqFt();
     document.getElementById("delete-row").style.display = (job && can.isManager()) ? "block" : "none";
     jobSheetBackdrop.classList.add("show");
     jobSheet.classList.add("show");
   }
+  // Live "Total Sq Ft" in the job form, recomputed as rolls/pallets change.
+  function updateFormSqFt(){
+    const val = sqFt(document.getElementById("f-rolls").value, document.getElementById("f-pallets").value);
+    document.getElementById("f-sqft").textContent = fmtSqFt(val);
+  }
+  document.getElementById("f-rolls").addEventListener("input", updateFormSqFt);
+  document.getElementById("f-pallets").addEventListener("input", updateFormSqFt);
   function closeJobSheet(){ jobSheetBackdrop.classList.remove("show"); jobSheet.classList.remove("show"); }
   document.getElementById("btn-new-job").addEventListener("click", () => {
     if (!isConfigured){ alert("Connect Firebase first — see the setup notice above."); return; }
@@ -1040,7 +1059,9 @@
       jobListEl.innerHTML = `<div class="empty"><div class="icon">${e.icon}</div><h3>${noneYet ? e.h3 : "No matches"}</h3><p>${noneYet ? e.p : "Try a different search."}</p></div>`;
       return;
     }
-    jobListEl.innerHTML = filtered.map(j => {
+    const totalSqFt = filtered.reduce((s, j) => s + jobSqFt(j), 0);
+    const totalBanner = `<div style="background:var(--card); border:1px solid var(--line); border-radius:11px; padding:11px 14px; margin-bottom:12px; font-size:14px; font-weight:650; box-shadow:var(--shadow);">Total ${currentJobFilter} work: <span style="color:var(--turf); font-weight:750;">${fmtSqFt(totalSqFt)}</span> <span style="color:var(--ink-soft); font-weight:600;">· ${filtered.length} job${filtered.length===1?"":"s"}</span></div>`;
+    jobListEl.innerHTML = totalBanner + filtered.map(j => {
       const st = jobStatus(j);
       const dateStr = st === "completed" && j.completedAt
         ? "Completed " + new Date(j.completedAt).toLocaleDateString(undefined,{month:'short',day:'numeric',year:'numeric'})
@@ -1056,6 +1077,7 @@
         <div class="stats">
           <span class="pill">${j.bigRolls || 0} rolls</span>
           <span class="pill soil">${j.pallets || 0} pallets</span>
+          <span class="pill" style="background:#E6EFE4; color:var(--turf);">${jobSqFt(j).toLocaleString()} sq ft</span>
           ${j.photos && j.photos.length ? `<span class="pill photos">📷 ${j.photos.length}</span>` : ""}
           ${st === "upcoming" ? `<span class="pill upcoming">🗓 Upcoming</span>` : ""}
           ${st === "completed" ? `<span class="pill done">✓ Completed</span>` : ""}
@@ -1073,9 +1095,9 @@
   document.getElementById("job-search").addEventListener("input", renderJobList);
 
   document.getElementById("btn-export-jobs").addEventListener("click", () => {
-    const rows = [["Address","Lot #","Big Rolls","Pallets","Maps Link","Notes","Photo Count","Status","Created","Completed"]];
+    const rows = [["Address","Lot #","Big Rolls","Pallets","Sq Ft","Maps Link","Notes","Photo Count","Status","Created","Completed"]];
     jobsCache.forEach(j => rows.push([
-      j.address, j.lot||"", j.bigRolls||0, j.pallets||0, j.mapsLink||"", j.notes||"",
+      j.address, j.lot||"", j.bigRolls||0, j.pallets||0, jobSqFt(j), j.mapsLink||"", j.notes||"",
       (j.photos||[]).length, jobStatus(j).charAt(0).toUpperCase() + jobStatus(j).slice(1),
       new Date(j.createdAt).toLocaleDateString(),
       j.completedAt ? new Date(j.completedAt).toLocaleDateString() : ""
@@ -1101,6 +1123,10 @@
       <div class="stat-grid">
         <div class="stat-box"><div class="num">${job.bigRolls || 0}</div><div class="lbl">Big Rolls</div></div>
         <div class="stat-box"><div class="num">${job.pallets || 0}</div><div class="lbl">Pallets</div></div>
+      </div>
+      <div class="stat-box" style="text-align:center; background:var(--turf-light); border-color:#CFE0CC; margin-bottom:4px;">
+        <div class="num" style="color:var(--turf);">${fmtSqFt(jobSqFt(job))}</div>
+        <div class="lbl">Total Square Footage (auto-calculated)</div>
       </div>
       ${job.mapsLink ? `
       <a class="map-link" href="${escapeHtml(job.mapsLink)}" target="_blank" rel="noopener">
@@ -1361,9 +1387,12 @@
           <div class="email">${escapeHtml(u.email || "(no email)")}${isSelf ? ` <span class="you">(you)</span>` : ""}</div>
           <input class="crew-name" placeholder="Name (shown on their entries)" value="${escapeHtml(u.name || "")}">
         </div>
-        <select ${isSelf ? "disabled" : ""}>
-          ${CREW_ROLE_OPTIONS.map(([v,l]) => `<option value="${v}"${u.role===v?" selected":""}>${l}</option>`).join("")}
-        </select>
+        <div style="display:flex; flex-direction:column; gap:6px; align-items:flex-end; flex-shrink:0;">
+          <select ${isSelf ? "disabled" : ""}>
+            ${CREW_ROLE_OPTIONS.map(([v,l]) => `<option value="${v}"${u.role===v?" selected":""}>${l}</option>`).join("")}
+          </select>
+          ${isSelf ? "" : `<button class="crew-remove" data-email="${escapeHtml(u.email || "")}">Remove</button>`}
+        </div>
       </div>`;
     }).join("");
     listEl.querySelectorAll(".crew-row").forEach(row => {
@@ -1389,6 +1418,19 @@
             showToast("Name saved");
           }catch(err){ console.error(err); alert("Couldn't save name — check your connection and try again."); }
           nameInput.disabled = false;
+        });
+      }
+      const rm = row.querySelector(".crew-remove");
+      if (rm){
+        rm.addEventListener("click", async () => {
+          const who = rm.dataset.email || "this person";
+          if (!confirm("Remove " + who + " from the crew?\n\nThey lose all access immediately. (This revokes access but doesn't delete their login — to fully delete the account, also remove them in Firebase Authentication.)")) return;
+          rm.disabled = true;
+          try{
+            await db.collection("users").doc(uid).delete();
+            showToast("Removed from crew");
+            openCrewSheet(); // reload the list
+          }catch(err){ console.error(err); alert("Couldn't remove — check your connection and try again."); rm.disabled = false; }
         });
       }
     });
