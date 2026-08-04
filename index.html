@@ -1152,6 +1152,7 @@
               : `<button class="btn ${isCompleted(job) ? "btn-ghost" : "btn-primary"}" id="detail-complete-btn">${isCompleted(job) ? "Reopen Job" : "Mark Complete"}</button>`)
           : ""}
       </div>
+      ${can.isManager() && jobStatus(job) === "open" ? `<div style="margin-top:10px;"><button class="btn btn-ghost btn-block" id="detail-unpromote-btn">↩ Move back to Upcoming</button></div>` : ""}
     `;
     body.querySelectorAll(".detail-photo-grid img").forEach(img => {
       img.addEventListener("click", () => {
@@ -1164,6 +1165,8 @@
     if (promoteBtn) promoteBtn.addEventListener("click", () => promoteToOpen(job));
     const completeBtn = body.querySelector("#detail-complete-btn");
     if (completeBtn) completeBtn.addEventListener("click", () => toggleJobComplete(job));
+    const unpromoteBtn = body.querySelector("#detail-unpromote-btn");
+    if (unpromoteBtn) unpromoteBtn.addEventListener("click", () => moveToUpcoming(job));
     detailSheetBackdrop.classList.add("show");
     detailSheet.classList.add("show");
   }
@@ -1188,6 +1191,27 @@
     updateNewJobButton();
     await loadJobs();
     showToast("Moved to Open — the crew can see it now");
+  }
+
+  // Move an Open job back to Upcoming (managers only) — e.g. if it was
+  // moved to Open by mistake.
+  async function moveToUpcoming(job){
+    const btn = document.getElementById("detail-unpromote-btn");
+    if (btn){ btn.disabled = true; btn.textContent = "Moving…"; }
+    try{
+      await db.collection("jobs").doc(job.id).update({ status: "upcoming", updatedAt: Date.now() });
+    }catch(err){
+      console.error(err);
+      if (btn){ btn.disabled = false; btn.textContent = "↩ Move back to Upcoming"; }
+      alert("Couldn't move — check your connection and try again.");
+      return;
+    }
+    closeDetailSheet();
+    currentJobFilter = "upcoming";
+    document.querySelectorAll(".subtab-btn").forEach(b => b.classList.toggle("active", b.dataset.jobfilter === "upcoming"));
+    updateNewJobButton();
+    await loadJobs();
+    showToast("Moved back to Upcoming");
   }
 
   // Mark a job complete (moves it to the Completed tab) or reopen it.
