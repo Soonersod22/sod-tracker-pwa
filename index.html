@@ -83,6 +83,7 @@
   .tab-btn[data-tab="install"] .dot{background:var(--turf-accent);}
   .tab-btn[data-tab="drops"] .dot{background:var(--hauler-accent);}
   .tab-btn[data-tab="places"] .dot{background:var(--soil);}
+  .tab-btn[data-tab="shop"] .dot{background:var(--hauler);}
 
   main{flex:1; padding:16px 16px 90px 16px;}
   .view{display:none;}
@@ -350,6 +351,7 @@
       <button class="tab-btn active" data-tab="install" id="tab-install"><span class="dot"></span>Install Jobs</button>
       <button class="tab-btn" data-tab="drops" id="tab-drops"><span class="dot"></span>Load Drops</button>
       <button class="tab-btn" data-tab="places" id="tab-places"><span class="dot"></span>Places</button>
+      <button class="tab-btn" data-tab="shop" id="tab-shop"><span class="dot"></span>Shop</button>
     </div>
   </header>
 
@@ -402,6 +404,19 @@
         <input id="pin-search" placeholder="Search places by name">
       </div>
       <div id="pin-list"></div>
+    </section>
+
+    <section id="view-shop" class="view">
+      <div class="subtabs">
+        <button class="subtab-btn active" data-shopview="parts" id="shoptab-parts">🧰 Parts</button>
+        <button class="subtab-btn" data-shopview="fleet" id="shoptab-fleet">🚛 Fleet</button>
+      </div>
+      <div id="shop-parts" class="shop-view">
+        <div class="empty"><div class="icon">🧰</div><h3>Parts Inventory</h3><p>Coming next — a running list of shop parts and supplies with quantities.</p></div>
+      </div>
+      <div id="shop-fleet" class="shop-view" style="display:none;">
+        <div class="empty"><div class="icon">🚛</div><h3>Fleet &amp; Service</h3><p>Coming next — your machines and trucks with a service history.</p></div>
+      </div>
     </section>
   </main>
 </div>
@@ -539,11 +554,14 @@
   let currentRole = null;   // resolved role string
   let currentName = "";     // display name for "logged by" attribution
   function actorLabel(){ return currentName || (currentUser && currentUser.email) || "Someone"; }
-  const ROLE_LABELS = { manager: "Manager", technician: "Technician", semi: "Semi Driver", unassigned: "Pending" };
+  const ROLE_LABELS = { manager: "Manager", technician: "Technician", mechanic: "Mechanic", semi: "Semi Driver", unassigned: "Pending" };
   const can = {
-    manageJobs: () => currentRole === "manager" || currentRole === "technician",
+    // Mechanics do jobs like a technician, plus they get the Shop.
+    manageJobs: () => currentRole === "manager" || currentRole === "technician" || currentRole === "mechanic",
     manageDrops: () => currentRole === "manager" || currentRole === "semi",
-    isManager: () => currentRole === "manager"
+    useShop:    () => currentRole === "manager" || currentRole === "mechanic",
+    isMechanic: () => currentRole === "mechanic",
+    isManager:  () => currentRole === "manager"
   };
 
   const authScreen = document.getElementById("auth-screen");
@@ -789,6 +807,16 @@
   }
   tabBtns.forEach(btn => btn.addEventListener("click", () => activateTab(btn.dataset.tab)));
 
+  // Shop sub-tabs (Parts / Fleet)
+  document.querySelectorAll("[data-shopview]").forEach(btn => {
+    btn.addEventListener("click", () => {
+      const view = btn.dataset.shopview;
+      document.querySelectorAll("[data-shopview]").forEach(b => b.classList.toggle("active", b === btn));
+      document.getElementById("shop-parts").style.display = view === "parts" ? "" : "none";
+      document.getElementById("shop-fleet").style.display = view === "fleet" ? "" : "none";
+    });
+  });
+
   // Show/hide features per role. Manager = everything; Technician = Open jobs
   // only; Semi Driver = Load Drops only. (The database rules enforce this for
   // real — this just keeps the UI honest.)
@@ -800,6 +828,8 @@
     document.getElementById("crew-btn").style.display = mgr ? "" : "none";
     document.getElementById("tab-install").classList.toggle("hidden-by-role", !jobs);
     document.getElementById("tab-drops").classList.toggle("hidden-by-role", !drops);
+    // The Shop tab is only for Managers and Mechanics.
+    document.getElementById("tab-shop").classList.toggle("hidden-by-role", !can.useShop());
     // The Places tab is available to every signed-in role, so the tab bar
     // always shows at least Places plus the role's own tab.
     document.getElementById("job-tabs").style.display = "";
@@ -813,7 +843,7 @@
     // Non-managers are pinned to the Open sub-tab.
     if (!mgr && currentJobFilter !== "open"){
       currentJobFilter = "open";
-      document.querySelectorAll(".subtab-btn").forEach(b => b.classList.toggle("active", b.dataset.jobfilter === "open"));
+      document.querySelectorAll("[data-jobfilter]").forEach(b => b.classList.toggle("active", b.dataset.jobfilter === "open"));
     }
     updateNewJobButton();
 
@@ -831,10 +861,10 @@
   let creatingStatus = "open";   // status a brand-new job gets, based on the active tab
 
   // Upcoming / Open / Completed sub-tabs on the Jobs screen
-  document.querySelectorAll(".subtab-btn").forEach(btn => {
+  document.querySelectorAll("[data-jobfilter]").forEach(btn => {
     btn.addEventListener("click", () => {
       currentJobFilter = btn.dataset.jobfilter;
-      document.querySelectorAll(".subtab-btn").forEach(b => b.classList.toggle("active", b === btn));
+      document.querySelectorAll("[data-jobfilter]").forEach(b => b.classList.toggle("active", b === btn));
       updateNewJobButton();
       renderJobList();
     });
@@ -1187,7 +1217,7 @@
     }
     closeDetailSheet();
     currentJobFilter = "open";
-    document.querySelectorAll(".subtab-btn").forEach(b => b.classList.toggle("active", b.dataset.jobfilter === "open"));
+    document.querySelectorAll("[data-jobfilter]").forEach(b => b.classList.toggle("active", b.dataset.jobfilter === "open"));
     updateNewJobButton();
     await loadJobs();
     showToast("Moved to Open — the crew can see it now");
@@ -1208,7 +1238,7 @@
     }
     closeDetailSheet();
     currentJobFilter = "upcoming";
-    document.querySelectorAll(".subtab-btn").forEach(b => b.classList.toggle("active", b.dataset.jobfilter === "upcoming"));
+    document.querySelectorAll("[data-jobfilter]").forEach(b => b.classList.toggle("active", b.dataset.jobfilter === "upcoming"));
     updateNewJobButton();
     await loadJobs();
     showToast("Moved back to Upcoming");
@@ -1405,7 +1435,7 @@
     renderCrewList(users);
   }
 
-  const CREW_ROLE_OPTIONS = [["unassigned","Pending (no access)"],["technician","Technician"],["semi","Semi Driver"],["manager","Manager"]];
+  const CREW_ROLE_OPTIONS = [["unassigned","Pending (no access)"],["technician","Technician"],["mechanic","Mechanic"],["semi","Semi Driver"],["manager","Manager"]];
   function renderCrewList(users){
     const listEl = document.getElementById("crew-list");
     if (!users.length){ listEl.innerHTML = `<div class="hint">No one has signed up yet. Have your crew open the app and create an account, then set their role here.</div>`; return; }
