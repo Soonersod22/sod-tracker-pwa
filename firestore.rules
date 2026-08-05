@@ -21,8 +21,7 @@ service cloud.firestore {
     function isManager()  { return myRole() == "manager" || isOwner(); }
     // Mechanics and Drivers work jobs like technicians.
     function canSeeJobs() { return myRole() == "manager" || myRole() == "technician" || myRole() == "mechanic" || myRole() == "driver"; }
-    // Drivers also handle Load Drops (like semi drivers).
-    function canSeeDrops(){ return myRole() == "manager" || myRole() == "semi" || myRole() == "driver"; }
+    function canSeeDrops(){ return myRole() == "manager" || myRole() == "semi"; }
     // Any assigned role — used for shared Places.
     function hasAccess()  { return myRole() == "manager" || myRole() == "technician" || myRole() == "mechanic" || myRole() == "driver" || myRole() == "semi"; }
     // Shop = managers and mechanics.

@@ -380,9 +380,9 @@
     <div class="tabs" id="job-tabs">
       <button class="tab-btn active" data-tab="install" id="tab-install"><span class="dot"></span>Install Jobs</button>
       <button class="tab-btn" data-tab="drops" id="tab-drops"><span class="dot"></span>Load Drops</button>
-      <button class="tab-btn" data-tab="places" id="tab-places"><span class="dot"></span>Places</button>
-      <button class="tab-btn" data-tab="shop" id="tab-shop"><span class="dot"></span>Shop</button>
+      <button class="tab-btn" data-tab="places" id="tab-places"><span class="dot"></span>Pins</button>
       <button class="tab-btn" data-tab="movegrass" id="tab-movegrass"><span class="dot"></span>Move Grass</button>
+      <button class="tab-btn" data-tab="shop" id="tab-shop"><span class="dot"></span>Shop</button>
     </div>
   </header>
 
@@ -430,11 +430,11 @@
 
     <section id="view-places" class="view">
       <div class="fab-row">
-        <button class="btn btn-primary btn-block" id="btn-new-pin">+ Add Place</button>
+        <button class="btn btn-primary btn-block" id="btn-new-pin">+ Add Pin</button>
       </div>
       <div class="search-wrap">
         <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="11" cy="11" r="7"/><line x1="21" y1="21" x2="16.65" y2="16.65"/></svg>
-        <input id="pin-search" placeholder="Search places by name">
+        <input id="pin-search" placeholder="Search pins by name">
       </div>
       <div id="pin-list"></div>
     </section>
@@ -529,7 +529,7 @@
 
 <div class="sheet-backdrop" id="pin-sheet-backdrop"></div>
 <div class="sheet" id="pin-sheet">
-  <div class="sheet-header"><h2 id="pin-sheet-title">Add Place</h2><button class="close-x" id="pin-sheet-close">✕</button></div>
+  <div class="sheet-header"><h2 id="pin-sheet-title">Add Pin</h2><button class="close-x" id="pin-sheet-close">✕</button></div>
   <div class="sheet-body">
     <div class="field"><label>Name *</label><input id="pin-name" placeholder="e.g. Selah Meadows"></div>
     <div class="field">
@@ -537,9 +537,9 @@
       <input id="pin-maps" placeholder="Paste Google Maps link">
       <div class="hint">Open Google Maps, drop a pin, tap Share → Copy Link, paste here.</div>
     </div>
-    <button class="btn btn-primary btn-block" id="btn-save-pin">Save Place</button>
+    <button class="btn btn-primary btn-block" id="btn-save-pin">Save Pin</button>
     <div id="pin-delete-row" style="margin-top:10px; display:none;">
-      <button class="btn btn-danger btn-block" id="btn-delete-pin">Delete Place</button>
+      <button class="btn btn-danger btn-block" id="btn-delete-pin">Delete Pin</button>
     </div>
   </div>
 </div>
@@ -723,7 +723,7 @@
     // Mechanics do jobs like a technician, plus the Shop.
     // Drivers do jobs like a technician, plus Load Drops, plus Move Grass.
     manageJobs: () => ["manager","technician","mechanic","driver"].indexOf(currentRole) >= 0,
-    manageDrops: () => ["manager","semi","driver"].indexOf(currentRole) >= 0,
+    manageDrops: () => ["manager","semi"].indexOf(currentRole) >= 0,
     useShop:    () => currentRole === "manager" || currentRole === "mechanic",
     moveGrass:  () => currentRole === "manager" || currentRole === "driver",
     isMechanic: () => currentRole === "mechanic",
@@ -1717,7 +1717,7 @@
 
   function openPinSheet(pin){
     editingPinId = pin ? pin.id : null;
-    document.getElementById("pin-sheet-title").textContent = pin ? "Edit Place" : "Add Place";
+    document.getElementById("pin-sheet-title").textContent = pin ? "Edit Pin" : "Add Pin";
     document.getElementById("pin-name").value = pin ? pin.name : "";
     document.getElementById("pin-maps").value = pin ? pin.mapsLink : "";
     // Only managers can delete a place.
@@ -1750,11 +1750,11 @@
       await db.collection("pins").doc(pinId).set(pin);
     }catch(err){
       console.error(err);
-      btn.disabled = false; btn.textContent = "Save Place";
+      btn.disabled = false; btn.textContent = "Save Pin";
       alert("Couldn't save — check your connection and try again.");
       return;
     }
-    btn.disabled = false; btn.textContent = "Save Place";
+    btn.disabled = false; btn.textContent = "Save Pin";
     closePinSheet();
     loadPins();
   });
@@ -1786,7 +1786,7 @@
     const q = (document.getElementById("pin-search").value || "").toLowerCase().trim();
     const filtered = pinsCache.filter(p => !q || (p.name||"").toLowerCase().includes(q));
     if (filtered.length === 0){
-      pinListEl.innerHTML = `<div class="empty"><div class="icon">📍</div><h3>${pinsCache.length===0 ? "No saved places yet" : "No matches"}</h3><p>${pinsCache.length===0 ? "Tap “+ Add Place” to save a Google Maps pin the whole crew can use." : "Try a different search."}</p></div>`;
+      pinListEl.innerHTML = `<div class="empty"><div class="icon">📍</div><h3>${pinsCache.length===0 ? "No saved pins yet" : "No matches"}</h3><p>${pinsCache.length===0 ? "Tap “+ Add Pin” to save a Google Maps pin the whole crew can use." : "Try a different search."}</p></div>`;
       return;
     }
     pinListEl.innerHTML = filtered.map(p => `
