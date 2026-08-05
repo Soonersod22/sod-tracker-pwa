@@ -286,6 +286,17 @@
   .pin-card .pin-open svg{color:var(--soil); flex-shrink:0;}
   .pin-card .pin-name{font-weight:700; font-size:15.5px; white-space:nowrap; overflow:hidden; text-overflow:ellipsis;}
   .pin-card .pin-edit{border:1px solid var(--line); background:var(--cream); color:var(--ink-soft); border-radius:8px; padding:8px 12px; font-size:13px; font-weight:650; cursor:pointer; font-family:inherit; flex-shrink:0;}
+  .part-card{background:var(--card); border:1px solid var(--line); border-radius:12px; box-shadow:var(--shadow); padding:12px 14px; margin-bottom:10px; display:flex; align-items:center; gap:12px;}
+  .part-card.low{border-color:#E9C2A6;}
+  .part-card .p-main{flex:1; min-width:0; cursor:pointer;}
+  .part-card .p-name{font-weight:700; font-size:15px;}
+  .part-card .p-meta{font-size:12.5px; color:var(--ink-soft); margin-top:3px; display:flex; gap:6px; flex-wrap:wrap; align-items:center;}
+  .part-card .p-qty{display:flex; align-items:center; gap:8px; flex-shrink:0;}
+  .qty-btn{width:34px; height:34px; border-radius:9px; border:1.5px solid var(--line); background:var(--cream); font-size:19px; font-weight:700; color:var(--ink); cursor:pointer; display:flex; align-items:center; justify-content:center; line-height:1; font-family:inherit;}
+  .qty-btn:active{background:#E4DECF;}
+  .qty-num{min-width:26px; text-align:center; font-weight:750; font-size:17px;}
+  .pill.low{background:var(--warn-light); color:var(--warn);}
+  .pill.pending{background:#EDE3F3; color:#7A4E9E;}
   .pw-wrap{position:relative;}
   .pw-wrap input{padding-right:64px;}
   .pw-toggle{position:absolute; right:8px; top:50%; transform:translateY(-50%); border:none; background:transparent; color:var(--turf); font-weight:700; font-size:13px; cursor:pointer; font-family:inherit; padding:6px 8px;}
@@ -412,7 +423,15 @@
         <button class="subtab-btn" data-shopview="fleet" id="shoptab-fleet">🚛 Fleet</button>
       </div>
       <div id="shop-parts" class="shop-view">
-        <div class="empty"><div class="icon">🧰</div><h3>Parts Inventory</h3><p>Coming next — a running list of shop parts and supplies with quantities.</p></div>
+        <div class="fab-row">
+          <button class="btn btn-primary" id="btn-new-part">+ Add Part</button>
+          <button class="btn btn-ghost" id="btn-export-parts" title="Export to CSV">⬇ CSV</button>
+        </div>
+        <div class="search-wrap">
+          <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="11" cy="11" r="7"/><line x1="21" y1="21" x2="16.65" y2="16.65"/></svg>
+          <input id="part-search" placeholder="Search parts by name or category">
+        </div>
+        <div id="part-list"></div>
       </div>
       <div id="shop-fleet" class="shop-view" style="display:none;">
         <div class="empty"><div class="icon">🚛</div><h3>Fleet &amp; Service</h3><p>Coming next — your machines and trucks with a service history.</p></div>
@@ -492,6 +511,23 @@
     <div id="pin-delete-row" style="margin-top:10px; display:none;">
       <button class="btn btn-danger btn-block" id="btn-delete-pin">Delete Place</button>
     </div>
+  </div>
+</div>
+
+<div class="sheet-backdrop" id="part-sheet-backdrop"></div>
+<div class="sheet" id="part-sheet">
+  <div class="sheet-header"><h2 id="part-sheet-title">Add Part</h2><button class="close-x" id="part-sheet-close">✕</button></div>
+  <div class="sheet-body">
+    <div class="field"><label>Part name *</label><input id="pt-name" placeholder="e.g. Tire 11R22.5"></div>
+    <div class="field"><label>Category</label><input id="pt-category" placeholder="e.g. Tires, Filters, Fluids"></div>
+    <div class="field-row">
+      <div class="field"><label>Quantity on hand</label><input id="pt-qty" type="number" inputmode="numeric" placeholder="0"></div>
+      <div class="field"><label>Low-stock at</label><input id="pt-low" type="number" inputmode="numeric" placeholder="e.g. 4"></div>
+    </div>
+    <div class="field"><label>Location / bin</label><input id="pt-location" placeholder="e.g. Rack B3 (optional)"></div>
+    <div class="field"><label>Part # / notes</label><input id="pt-notes" placeholder="Optional"></div>
+    <button class="btn btn-primary btn-block" id="btn-save-part">Save Part</button>
+    <div id="part-delete-row" style="margin-top:12px;"></div>
   </div>
 </div>
 
@@ -699,6 +735,7 @@
     if (can.manageJobs()) loadJobs();
     if (can.manageDrops()) loadDrops();
     loadPins(); // available to every signed-in role
+    if (can.useShop()) loadParts();
   }
 
   function showLogin(){
@@ -1595,6 +1632,185 @@
       });
     });
   }
+
+  // ==================================================
+  // SHOP — PARTS INVENTORY (managers + mechanics)
+  // Delete model: managers delete outright; mechanics request deletion
+  // (sets pendingDelete), and a manager approves or cancels.
+  // ==================================================
+  let partsCache = [];
+  let editingPartId = null;
+  const partListEl = document.getElementById("part-list");
+  const partSheet = document.getElementById("part-sheet");
+  const partSheetBackdrop = document.getElementById("part-sheet-backdrop");
+
+  function closePartSheet(){ partSheetBackdrop.classList.remove("show"); partSheet.classList.remove("show"); }
+  document.getElementById("part-sheet-close").addEventListener("click", closePartSheet);
+  partSheetBackdrop.addEventListener("click", closePartSheet);
+  document.getElementById("btn-new-part").addEventListener("click", () => { if (!isConfigured) return; openPartSheet(null); });
+  document.getElementById("part-search").addEventListener("input", renderPartList);
+
+  function openPartSheet(part){
+    editingPartId = part ? part.id : null;
+    document.getElementById("part-sheet-title").textContent = part ? "Edit Part" : "Add Part";
+    document.getElementById("pt-name").value = part ? (part.name||"") : "";
+    document.getElementById("pt-category").value = part ? (part.category||"") : "";
+    document.getElementById("pt-qty").value = part ? (part.quantity!=null?part.quantity:"") : "";
+    document.getElementById("pt-low").value = part ? (part.lowStock!=null?part.lowStock:"") : "";
+    document.getElementById("pt-location").value = part ? (part.location||"") : "";
+    document.getElementById("pt-notes").value = part ? (part.notes||"") : "";
+    renderPartDeleteRow(part);
+    partSheetBackdrop.classList.add("show");
+    partSheet.classList.add("show");
+  }
+
+  // Role-aware delete controls: managers delete outright (or approve/cancel a
+  // request); mechanics can only request a deletion.
+  function renderPartDeleteRow(part){
+    const row = document.getElementById("part-delete-row");
+    if (!part){ row.innerHTML = ""; return; }
+    if (can.isManager()){
+      if (part.pendingDelete){
+        row.innerHTML = `<div class="hint" style="margin-bottom:8px; color:var(--warn);">Deletion requested by ${escapeHtml(part.pendingDeleteBy||"a mechanic")}.</div>
+          <button class="btn btn-danger btn-block" id="btn-approve-del">Approve deletion</button>
+          <button class="btn btn-ghost btn-block" id="btn-cancel-del" style="margin-top:8px;">Keep it (cancel request)</button>`;
+      } else {
+        row.innerHTML = `<button class="btn btn-danger btn-block" id="btn-del-part">Delete Part</button>`;
+      }
+    } else {
+      row.innerHTML = part.pendingDelete
+        ? `<div class="hint" style="color:var(--warn);">Deletion requested — awaiting a manager's approval.</div>`
+        : `<button class="btn btn-danger btn-block" id="btn-req-del">Request Deletion</button>`;
+    }
+    const approve = row.querySelector("#btn-approve-del");
+    if (approve) approve.addEventListener("click", () => deletePart(part.id));
+    const del = row.querySelector("#btn-del-part");
+    if (del) del.addEventListener("click", () => { if (confirm("Delete this part? This can't be undone.")) deletePart(part.id); });
+    const cancel = row.querySelector("#btn-cancel-del");
+    if (cancel) cancel.addEventListener("click", () => setPartPendingDelete(part.id, false));
+    const req = row.querySelector("#btn-req-del");
+    if (req) req.addEventListener("click", () => { if (confirm("Request that a manager delete this part?")) setPartPendingDelete(part.id, true); });
+  }
+
+  document.getElementById("btn-save-part").addEventListener("click", async () => {
+    const name = document.getElementById("pt-name").value.trim();
+    if (!name){ document.getElementById("pt-name").focus(); return; }
+    const btn = document.getElementById("btn-save-part");
+    btn.disabled = true; btn.textContent = "Saving…";
+    const partId = editingPartId || uid("part");
+    const existing = partsCache.find(p => p.id === partId);
+    const part = {
+      id: partId,
+      name,
+      category: document.getElementById("pt-category").value.trim(),
+      quantity: parseInt(document.getElementById("pt-qty").value, 10) || 0,
+      lowStock: parseInt(document.getElementById("pt-low").value, 10) || 0,
+      location: document.getElementById("pt-location").value.trim(),
+      notes: document.getElementById("pt-notes").value.trim(),
+      pendingDelete: existing ? (existing.pendingDelete || false) : false,
+      pendingDeleteBy: existing ? (existing.pendingDeleteBy || "") : "",
+      createdAt: existing ? existing.createdAt : Date.now(),
+      updatedAt: Date.now(),
+      updatedByName: actorLabel()
+    };
+    try{
+      await db.collection("parts").doc(partId).set(part);
+    }catch(err){
+      console.error(err);
+      btn.disabled = false; btn.textContent = "Save Part";
+      alert("Couldn't save — check your connection and try again.");
+      return;
+    }
+    btn.disabled = false; btn.textContent = "Save Part";
+    closePartSheet();
+    loadParts();
+  });
+
+  async function deletePart(partId){
+    try{ await db.collection("parts").doc(partId).delete(); }
+    catch(err){ console.error(err); alert("Couldn't delete — check your connection and try again."); return; }
+    closePartSheet();
+    loadParts();
+    showToast("Part deleted");
+  }
+
+  async function setPartPendingDelete(partId, flag){
+    try{
+      await db.collection("parts").doc(partId).update({ pendingDelete: flag, pendingDeleteBy: flag ? actorLabel() : "", updatedAt: Date.now() });
+    }catch(err){ console.error(err); alert("Couldn't update — check your connection and try again."); return; }
+    closePartSheet();
+    loadParts();
+    showToast(flag ? "Deletion requested — a manager will review it" : "Request cancelled");
+  }
+
+  // Quick +/- quantity adjust from the list (managers + mechanics).
+  async function adjustPartQty(partId, delta){
+    const part = partsCache.find(p => p.id === partId);
+    if (!part) return;
+    const newQty = Math.max(0, (parseInt(part.quantity, 10) || 0) + delta);
+    part.quantity = newQty; // optimistic update
+    renderPartList();
+    try{
+      await db.collection("parts").doc(partId).update({ quantity: newQty, updatedAt: Date.now() });
+    }catch(err){ console.error(err); alert("Couldn't update quantity — check your connection."); loadParts(); }
+  }
+
+  async function loadParts(){
+    if (!isConfigured) return;
+    partListEl.innerHTML = `<div class="loading-row"><div class="spinner"></div>Loading parts…</div>`;
+    try{
+      const snap = await db.collection("parts").orderBy("name").get();
+      partsCache = snap.docs.map(d => d.data());
+    }catch(err){
+      console.error(err);
+      partListEl.innerHTML = `<div class="empty"><div class="icon">⚠</div><h3>Couldn't load parts</h3><p>Check your connection and try again.</p></div>`;
+      return;
+    }
+    renderPartList();
+  }
+
+  function isLowStock(p){ const low = parseInt(p.lowStock, 10) || 0; return low > 0 && (parseInt(p.quantity, 10) || 0) <= low; }
+
+  function renderPartList(){
+    const q = (document.getElementById("part-search").value || "").toLowerCase().trim();
+    const filtered = partsCache.filter(p => !q || (p.name||"").toLowerCase().includes(q) || (p.category||"").toLowerCase().includes(q));
+    if (filtered.length === 0){
+      partListEl.innerHTML = `<div class="empty"><div class="icon">🧰</div><h3>${partsCache.length===0 ? "No parts yet" : "No matches"}</h3><p>${partsCache.length===0 ? "Tap “+ Add Part” to start your inventory." : "Try a different search."}</p></div>`;
+      return;
+    }
+    partListEl.innerHTML = filtered.map(p => {
+      const qty = parseInt(p.quantity, 10) || 0;
+      const low = isLowStock(p);
+      return `
+      <div class="part-card${low ? " low" : ""}" data-id="${p.id}">
+        <div class="p-main" data-edit="${p.id}">
+          <div class="p-name">${escapeHtml(p.name)}</div>
+          <div class="p-meta">
+            ${p.category ? `<span>${escapeHtml(p.category)}</span>` : ""}
+            ${p.location ? `<span>· ${escapeHtml(p.location)}</span>` : ""}
+            ${low ? `<span class="pill low">Low stock</span>` : ""}
+            ${p.pendingDelete ? `<span class="pill pending">Pending deletion</span>` : ""}
+          </div>
+        </div>
+        <div class="p-qty">
+          <button class="qty-btn" data-minus="${p.id}">−</button>
+          <span class="qty-num">${qty}</span>
+          <button class="qty-btn" data-plus="${p.id}">+</button>
+        </div>
+      </div>`;
+    }).join("");
+    partListEl.querySelectorAll("[data-edit]").forEach(el => el.addEventListener("click", () => {
+      const part = partsCache.find(p => p.id === el.dataset.edit); if (part) openPartSheet(part);
+    }));
+    partListEl.querySelectorAll("[data-minus]").forEach(b => b.addEventListener("click", (e) => { e.stopPropagation(); adjustPartQty(b.dataset.minus, -1); }));
+    partListEl.querySelectorAll("[data-plus]").forEach(b => b.addEventListener("click", (e) => { e.stopPropagation(); adjustPartQty(b.dataset.plus, 1); }));
+  }
+
+  document.getElementById("btn-export-parts").addEventListener("click", () => {
+    const rows = [["Name","Category","Quantity","Low-stock at","Location","Part #/Notes"]];
+    partsCache.forEach(p => rows.push([p.name, p.category||"", parseInt(p.quantity,10)||0, parseInt(p.lowStock,10)||0, p.location||"", p.notes||""]));
+    downloadCsv("shop-parts-inventory.csv", rows);
+  });
 
   // ---------------- Init ----------------
   // Data loads once a user signs in and their role resolves (see enterApp).

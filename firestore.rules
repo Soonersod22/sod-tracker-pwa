@@ -24,6 +24,8 @@ service cloud.firestore {
     function canSeeDrops(){ return myRole() == "manager" || myRole() == "semi"; }
     // Any assigned role — used for shared Places.
     function hasAccess()  { return myRole() == "manager" || myRole() == "technician" || myRole() == "mechanic" || myRole() == "semi"; }
+    // Shop = managers and mechanics.
+    function canShop()    { return isManager() || myRole() == "mechanic"; }
     // A job doc counts as "open" if its status is "open" or missing (legacy).
     function docIsOpen(d) { return !("status" in d) || d.status == "open"; }
 
@@ -50,6 +52,15 @@ service cloud.firestore {
     match /pins/{pinId} {
       allow read:           if hasAccess();
       allow create, update: if hasAccess() && request.resource.data.size() <= 20;
+      allow delete:         if isManager();
+    }
+
+    // Shop parts inventory — managers and mechanics view/add/edit; mechanics
+    // request deletion via the pendingDelete flag (an update); only managers
+    // hard-delete.
+    match /parts/{partId} {
+      allow read:           if canShop();
+      allow create, update: if canShop() && request.resource.data.size() <= 40;
       allow delete:         if isManager();
     }
 
