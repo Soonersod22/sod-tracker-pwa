@@ -566,6 +566,29 @@
   </div>
 </div>
 
+<div class="sheet-backdrop" id="vehicle-detail-backdrop"></div>
+<div class="sheet" id="vehicle-detail-sheet">
+  <div class="sheet-header"><h2>Vehicle</h2><button class="close-x" id="vehicle-detail-close">✕</button></div>
+  <div class="sheet-body" id="vehicle-detail-body"></div>
+</div>
+
+<div class="sheet-backdrop" id="service-sheet-backdrop"></div>
+<div class="sheet" id="service-sheet">
+  <div class="sheet-header"><h2 id="service-sheet-title">Log Service</h2><button class="close-x" id="service-sheet-close">✕</button></div>
+  <div class="sheet-body">
+    <div class="field"><label>Date</label><input id="sv-date" type="date"></div>
+    <div class="field"><label>What was done *</label><textarea id="sv-desc" placeholder="e.g. Oil change + replaced front tires"></textarea></div>
+    <div class="field-row">
+      <div class="field"><label>Meter (mi / hrs)</label><input id="sv-meter" type="number" inputmode="numeric" placeholder="e.g. 84300"></div>
+      <div class="field"><label>Cost ($)</label><input id="sv-cost" type="number" inputmode="decimal" placeholder="0"></div>
+    </div>
+    <div class="field"><label>Parts used</label><input id="sv-parts" placeholder="e.g. 2× 11R22.5 tires (optional)"></div>
+    <div class="field"><label>Notes</label><input id="sv-notes" placeholder="Optional"></div>
+    <button class="btn btn-primary btn-block" id="btn-save-service">Save Service</button>
+    <div id="service-delete-row" style="margin-top:12px;"></div>
+  </div>
+</div>
+
 <div class="lightbox" id="lightbox"><button class="lb-close" id="lb-close">✕</button><img id="lb-img" src=""></div>
 <div class="copy-toast" id="copy-toast">Copied to clipboard</div>
 
@@ -770,7 +793,7 @@
     if (can.manageJobs()) loadJobs();
     if (can.manageDrops()) loadDrops();
     loadPins(); // available to every signed-in role
-    if (can.useShop()){ loadParts(); loadVehicles(); }
+    if (can.useShop()){ loadParts(); loadVehicles(); loadServices(); }
   }
 
   function showLogin(){
@@ -2028,8 +2051,169 @@
     if (equip.length) html += `<div class="cat-group"><div class="cat-header">🚜 Equipment<span class="cat-count">${equip.length}</span></div>${equip.map(vehicleCardHtml).join("")}</div>`;
     vehicleListEl.innerHTML = html;
     vehicleListEl.querySelectorAll("[data-vedit]").forEach(el => el.addEventListener("click", () => {
-      const v = vehiclesCache.find(x => x.id === el.dataset.vedit); if (v) openVehicleSheet(v);
+      const v = vehiclesCache.find(x => x.id === el.dataset.vedit); if (v) openVehicleDetail(v);
     }));
+  }
+
+  // ==================================================
+  // SHOP — SERVICE RECORDS (per vehicle)
+  // ==================================================
+  let serviceCache = [];
+  let currentServiceVehicle = null;
+  let editingServiceId = null;
+
+  const vehDetailSheet = document.getElementById("vehicle-detail-sheet");
+  const vehDetailBackdrop = document.getElementById("vehicle-detail-backdrop");
+  function closeVehicleDetail(){ vehDetailBackdrop.classList.remove("show"); vehDetailSheet.classList.remove("show"); }
+  document.getElementById("vehicle-detail-close").addEventListener("click", closeVehicleDetail);
+  vehDetailBackdrop.addEventListener("click", closeVehicleDetail);
+
+  const serviceSheet = document.getElementById("service-sheet");
+  const serviceBackdrop = document.getElementById("service-sheet-backdrop");
+  function closeServiceSheet(){ serviceBackdrop.classList.remove("show"); serviceSheet.classList.remove("show"); }
+  document.getElementById("service-sheet-close").addEventListener("click", closeServiceSheet);
+  serviceBackdrop.addEventListener("click", closeServiceSheet);
+
+  async function loadServices(){
+    if (!isConfigured) return;
+    try{
+      const snap = await db.collection("serviceRecords").get();
+      serviceCache = snap.docs.map(d => d.data());
+    }catch(err){ console.error("load services failed", err); serviceCache = []; }
+  }
+
+  function servicesForVehicle(vehicleId){
+    return serviceCache.filter(s => s.vehicleId === vehicleId)
+      .sort((a,b) => (b.serviceDate||b.createdAt||0) - (a.serviceDate||a.createdAt||0));
+  }
+
+  function vehicleSummaryHtml(v){
+    const detail = v.type === "truck"
+      ? [v.year ? escapeHtml(String(v.year)) : "", v.vinLast4 ? "VIN ••"+escapeHtml(v.vinLast4) : ""].filter(Boolean).join(" · ")
+      : (v.number ? "# "+escapeHtml(v.number) : "");
+    return `<div class="detail-hero"><div class="subdiv">${v.type === "truck" ? "🚛 Truck" : "🚜 Equipment"}</div><div class="addr">${escapeHtml(v.name)}</div>${detail ? `<div class="lot">${detail}</div>` : ""}</div>`;
+  }
+
+  function serviceRecordHtml(s){
+    const dt = s.serviceDate ? new Date(s.serviceDate).toLocaleDateString(undefined,{month:'short',day:'numeric',year:'numeric'}) : "";
+    const bits = [];
+    if (s.meter) bits.push(escapeHtml(String(s.meter)) + " mi/hrs");
+    if (s.cost) bits.push("$" + escapeHtml(String(s.cost)));
+    if (s.partsUsed) bits.push(escapeHtml(s.partsUsed));
+    return `
+      <div class="part-card" data-svedit="${s.id}" style="cursor:pointer; display:block;">
+        <div style="display:flex; justify-content:space-between; gap:8px; align-items:baseline;">
+          <div class="p-name">${escapeHtml(s.description||"Service")}</div>
+          <div class="hint" style="white-space:nowrap;">${dt}</div>
+        </div>
+        ${bits.length ? `<div class="p-meta">${bits.join(" · ")}</div>` : ""}
+        ${(s.performedByName || s.pendingDelete) ? `<div class="p-meta">${s.performedByName ? "By " + escapeHtml(s.performedByName) : ""}${s.pendingDelete ? ` <span class="pill pending">Pending deletion</span>` : ""}</div>` : ""}
+      </div>`;
+  }
+
+  function openVehicleDetail(v){
+    currentServiceVehicle = v;
+    const body = document.getElementById("vehicle-detail-body");
+    const records = servicesForVehicle(v.id);
+    body.innerHTML = `
+      ${vehicleSummaryHtml(v)}
+      <button class="btn btn-primary btn-block" id="btn-log-service">＋ Log Service</button>
+      <div class="section-lbl">Service history (${records.length})</div>
+      ${records.length ? records.map(serviceRecordHtml).join("") : `<div class="hint">No service logged yet.</div>`}
+      <div class="action-row" style="margin-top:18px;"><button class="btn btn-ghost btn-block" id="btn-edit-vehicle">Edit vehicle details</button></div>
+    `;
+    body.querySelector("#btn-log-service").addEventListener("click", () => { closeVehicleDetail(); openServiceSheet(v, null); });
+    body.querySelector("#btn-edit-vehicle").addEventListener("click", () => { closeVehicleDetail(); openVehicleSheet(v); });
+    body.querySelectorAll("[data-svedit]").forEach(el => el.addEventListener("click", () => {
+      const rec = serviceCache.find(s => s.id === el.dataset.svedit); if (rec){ closeVehicleDetail(); openServiceSheet(v, rec); }
+    }));
+    vehDetailBackdrop.classList.add("show");
+    vehDetailSheet.classList.add("show");
+  }
+
+  function openServiceSheet(vehicle, rec){
+    currentServiceVehicle = vehicle;
+    editingServiceId = rec ? rec.id : null;
+    document.getElementById("service-sheet-title").textContent = rec ? "Edit Service" : "Log Service";
+    const d = rec && rec.serviceDate ? new Date(rec.serviceDate) : new Date();
+    document.getElementById("sv-date").value = d.toISOString().slice(0,10);
+    document.getElementById("sv-desc").value = rec ? (rec.description||"") : "";
+    document.getElementById("sv-meter").value = rec ? (rec.meter||"") : "";
+    document.getElementById("sv-cost").value = rec ? (rec.cost||"") : "";
+    document.getElementById("sv-parts").value = rec ? (rec.partsUsed||"") : "";
+    document.getElementById("sv-notes").value = rec ? (rec.notes||"") : "";
+    renderServiceDeleteRow(rec);
+    serviceBackdrop.classList.add("show");
+    serviceSheet.classList.add("show");
+  }
+
+  function renderServiceDeleteRow(rec){
+    const row = document.getElementById("service-delete-row");
+    if (!rec){ row.innerHTML = ""; return; }
+    if (can.isManager()){
+      if (rec.pendingDelete){
+        row.innerHTML = `<div class="hint" style="margin-bottom:8px; color:var(--warn);">Deletion requested by ${escapeHtml(rec.pendingDeleteBy||"a mechanic")}.</div>
+          <button class="btn btn-danger btn-block" id="btn-approve-sdel">Approve deletion</button>
+          <button class="btn btn-ghost btn-block" id="btn-cancel-sdel" style="margin-top:8px;">Keep it (cancel request)</button>`;
+      } else {
+        row.innerHTML = `<button class="btn btn-danger btn-block" id="btn-del-service">Delete Service Record</button>`;
+      }
+    } else {
+      row.innerHTML = rec.pendingDelete
+        ? `<div class="hint" style="color:var(--warn);">Deletion requested — awaiting a manager's approval.</div>`
+        : `<button class="btn btn-danger btn-block" id="btn-req-sdel">Request Deletion</button>`;
+    }
+    const approve = row.querySelector("#btn-approve-sdel"); if (approve) approve.addEventListener("click", () => deleteService(rec.id));
+    const del = row.querySelector("#btn-del-service"); if (del) del.addEventListener("click", () => { if (confirm("Delete this service record? This can't be undone.")) deleteService(rec.id); });
+    const cancel = row.querySelector("#btn-cancel-sdel"); if (cancel) cancel.addEventListener("click", () => setServicePendingDelete(rec.id, false));
+    const req = row.querySelector("#btn-req-sdel"); if (req) req.addEventListener("click", () => { if (confirm("Request that a manager delete this record?")) setServicePendingDelete(rec.id, true); });
+  }
+
+  document.getElementById("btn-save-service").addEventListener("click", async () => {
+    const desc = document.getElementById("sv-desc").value.trim();
+    if (!desc){ document.getElementById("sv-desc").focus(); return; }
+    if (!currentServiceVehicle) return;
+    const btn = document.getElementById("btn-save-service");
+    btn.disabled = true; btn.textContent = "Saving…";
+    const svId = editingServiceId || uid("svc");
+    const existing = serviceCache.find(s => s.id === svId);
+    const dateVal = document.getElementById("sv-date").value;
+    const serviceDate = dateVal ? new Date(dateVal + "T12:00:00").getTime() : Date.now();
+    const record = {
+      id: svId,
+      vehicleId: currentServiceVehicle.id,
+      serviceDate,
+      description: desc,
+      meter: document.getElementById("sv-meter").value.trim(),
+      cost: document.getElementById("sv-cost").value.trim(),
+      partsUsed: document.getElementById("sv-parts").value.trim(),
+      notes: document.getElementById("sv-notes").value.trim(),
+      performedByName: existing ? (existing.performedByName || actorLabel()) : actorLabel(),
+      pendingDelete: existing ? (existing.pendingDelete||false) : false,
+      pendingDeleteBy: existing ? (existing.pendingDeleteBy||"") : "",
+      createdAt: existing ? existing.createdAt : Date.now(),
+      updatedAt: Date.now()
+    };
+    try{
+      await db.collection("serviceRecords").doc(svId).set(record);
+    }catch(err){ console.error(err); btn.disabled=false; btn.textContent="Save Service"; alert("Couldn't save — check your connection and try again."); return; }
+    btn.disabled = false; btn.textContent = "Save Service";
+    closeServiceSheet();
+    await loadServices();
+    openVehicleDetail(currentServiceVehicle);
+  });
+
+  async function deleteService(svId){
+    try{ await db.collection("serviceRecords").doc(svId).delete(); }
+    catch(err){ console.error(err); alert("Couldn't delete — check your connection and try again."); return; }
+    closeServiceSheet(); await loadServices(); showToast("Service record deleted");
+    if (currentServiceVehicle) openVehicleDetail(currentServiceVehicle);
+  }
+  async function setServicePendingDelete(svId, flag){
+    try{ await db.collection("serviceRecords").doc(svId).update({ pendingDelete: flag, pendingDeleteBy: flag ? actorLabel() : "", updatedAt: Date.now() }); }
+    catch(err){ console.error(err); alert("Couldn't update — check your connection and try again."); return; }
+    closeServiceSheet(); await loadServices(); showToast(flag ? "Deletion requested — a manager will review it" : "Request cancelled");
+    if (currentServiceVehicle) openVehicleDetail(currentServiceVehicle);
   }
 
   // ---------------- Init ----------------
