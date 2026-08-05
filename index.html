@@ -85,6 +85,7 @@
   .tab-btn[data-tab="places"] .dot{background:var(--soil);}
   .tab-btn[data-tab="shop"] .dot{background:var(--hauler);}
   .tab-btn[data-tab="movegrass"] .dot{background:var(--warn);}
+  .tab-btn[data-tab="grade"] .dot{background:var(--soil);}
 
   main{flex:1; padding:16px 16px 90px 16px;}
   .view{display:none;}
@@ -382,6 +383,7 @@
       <button class="tab-btn" data-tab="drops" id="tab-drops"><span class="dot"></span>Load Drops</button>
       <button class="tab-btn" data-tab="places" id="tab-places"><span class="dot"></span>Pins</button>
       <button class="tab-btn" data-tab="movegrass" id="tab-movegrass"><span class="dot"></span>Move Grass</button>
+      <button class="tab-btn" data-tab="grade" id="tab-grade"><span class="dot"></span>Grade</button>
       <button class="tab-btn" data-tab="shop" id="tab-shop"><span class="dot"></span>Shop</button>
     </div>
   </header>
@@ -466,6 +468,17 @@
     <section id="view-movegrass" class="view">
       <div id="grass-tally"></div>
       <div id="grass-list"></div>
+    </section>
+
+    <section id="view-grade" class="view">
+      <div class="fab-row">
+        <button class="btn btn-primary btn-block" id="btn-new-grade">+ New Grade Task</button>
+      </div>
+      <div class="search-wrap">
+        <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="11" cy="11" r="7"/><line x1="21" y1="21" x2="16.65" y2="16.65"/></svg>
+        <input id="grade-search" placeholder="Search by neighborhood, address, or lot #">
+      </div>
+      <div id="grade-list"></div>
     </section>
   </main>
 </div>
@@ -659,6 +672,29 @@
   </div>
 </div>
 
+<div class="sheet-backdrop" id="grade-sheet-backdrop"></div>
+<div class="sheet" id="grade-sheet">
+  <div class="sheet-header"><h2 id="grade-sheet-title">New Grade Task</h2><button class="close-x" id="grade-sheet-close">✕</button></div>
+  <div class="sheet-body">
+    <div class="field"><label>Neighborhood *</label><input id="gr-hood" placeholder="e.g. Selah Meadows"></div>
+    <div class="field"><label>Address</label><input id="gr-address" placeholder="123 Oak St (address and/or lot #)"></div>
+    <div class="field"><label>Lot #</label><input id="gr-lot" placeholder="Optional"></div>
+    <div class="field">
+      <label>Verification Photos *</label>
+      <div class="photo-grid" id="grade-photo-grid">
+        <label class="add-photo-btn">
+          <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M12 5v14M5 12h14"/></svg>
+          Add
+          <input type="file" accept="image/*" multiple id="grade-photo-input" style="display:none;">
+        </label>
+      </div>
+      <div class="hint">At least one photo is required to save.</div>
+    </div>
+    <button class="btn btn-primary btn-block" id="btn-save-grade">Save Grade Task</button>
+    <div id="grade-verify-row" style="margin-top:12px;"></div>
+  </div>
+</div>
+
 <div class="lightbox" id="lightbox"><button class="lb-close" id="lb-close">✕</button><img id="lb-img" src=""></div>
 <div class="copy-toast" id="copy-toast">Copied to clipboard</div>
 
@@ -718,14 +754,17 @@
   let currentRole = null;   // resolved role string
   let currentName = "";     // display name for "logged by" attribution
   function actorLabel(){ return currentName || (currentUser && currentUser.email) || "Someone"; }
-  const ROLE_LABELS = { manager: "Manager", technician: "Technician", mechanic: "Mechanic", driver: "Driver", semi: "Semi Driver", unassigned: "Pending" };
+  const ROLE_LABELS = { manager: "Manager", technician: "Technician", mechanic: "Mechanic", driver: "Driver", semi: "Semi Driver", grader: "Grader", unassigned: "Pending" };
   const can = {
     // Mechanics do jobs like a technician, plus the Shop.
-    // Drivers do jobs like a technician, plus Load Drops, plus Move Grass.
+    // Drivers do jobs like a technician, plus Move Grass.
+    // Graders see ONLY the Grade tab.
     manageJobs: () => ["manager","technician","mechanic","driver"].indexOf(currentRole) >= 0,
     manageDrops: () => ["manager","semi"].indexOf(currentRole) >= 0,
     useShop:    () => currentRole === "manager" || currentRole === "mechanic",
     moveGrass:  () => currentRole === "manager" || currentRole === "driver",
+    grade:      () => currentRole === "manager" || currentRole === "grader",
+    usePins:    () => currentRole !== "grader",  // everyone except graders sees Pins
     isMechanic: () => currentRole === "mechanic",
     isManager:  () => currentRole === "manager"
   };
@@ -866,6 +905,7 @@
     if (can.manageDrops()) loadDrops();
     loadPins(); // available to every signed-in role
     if (can.useShop()){ loadParts(); loadVehicles(); loadServices(); }
+    if (can.grade()) loadGradeTasks();
   }
 
   function showLogin(){
@@ -973,6 +1013,7 @@
     document.querySelectorAll(".view").forEach(v => v.classList.remove("active"));
     document.getElementById("view-" + name).classList.add("active");
     if (name === "movegrass") renderMoveGrassList();
+    if (name === "grade") renderGradeList();
   }
   tabBtns.forEach(btn => btn.addEventListener("click", () => activateTab(btn.dataset.tab)));
 
@@ -1001,8 +1042,10 @@
     document.getElementById("tab-shop").classList.toggle("hidden-by-role", !can.useShop());
     // The Move Grass tab is only for Drivers and Managers.
     document.getElementById("tab-movegrass").classList.toggle("hidden-by-role", !can.moveGrass());
-    // The Places tab is available to every signed-in role, so the tab bar
-    // always shows at least Places plus the role's own tab.
+    // The Grade tab is only for Graders and Managers.
+    document.getElementById("tab-grade").classList.toggle("hidden-by-role", !can.grade());
+    // Pins is for everyone except Graders (who are locked to Grade only).
+    document.getElementById("tab-places").classList.toggle("hidden-by-role", !can.usePins());
     document.getElementById("job-tabs").style.display = "";
 
     // Only managers get Upcoming / Completed sub-tabs and the exports.
@@ -1021,8 +1064,9 @@
     }
     updateNewJobButton();
 
-    // Land on the tab that fits the role.
-    activateTab(jobs ? "install" : "drops");
+    // Land on the first tab this role can actually use.
+    const landing = jobs ? "install" : (drops ? "drops" : (can.grade() ? "grade" : (can.moveGrass() ? "movegrass" : (can.usePins() ? "places" : "grade"))));
+    activateTab(landing);
   }
 
   // ==================================================
@@ -1645,7 +1689,7 @@
     renderCrewList(users);
   }
 
-  const CREW_ROLE_OPTIONS = [["unassigned","Pending (no access)"],["technician","Technician"],["mechanic","Mechanic"],["driver","Driver"],["semi","Semi Driver"],["manager","Manager"]];
+  const CREW_ROLE_OPTIONS = [["unassigned","Pending (no access)"],["technician","Technician"],["mechanic","Mechanic"],["driver","Driver"],["semi","Semi Driver"],["grader","Grader"],["manager","Manager"]];
   function renderCrewList(users){
     const listEl = document.getElementById("crew-list");
     if (!users.length){ listEl.innerHTML = `<div class="hint">No one has signed up yet. Have your crew open the app and create an account, then set their role here.</div>`; return; }
@@ -2615,6 +2659,157 @@
       await loadJobs();
       renderMoveGrassList();
       showToast("Grass moved — nice work");
+    }));
+  }
+
+  // ==================================================
+  // GRADE TASKS (graders + managers). Photos required.
+  // Managers "Verify & Clear" = delete the task and its photos.
+  // ==================================================
+  let gradeCache = [];
+  let editingGradeId = null;
+  let gradePendingPhotos = [];
+  const gradeListEl = document.getElementById("grade-list");
+  const gradeSheet = document.getElementById("grade-sheet");
+  const gradeSheetBackdrop = document.getElementById("grade-sheet-backdrop");
+
+  function closeGradeSheet(){ gradeSheetBackdrop.classList.remove("show"); gradeSheet.classList.remove("show"); }
+  document.getElementById("grade-sheet-close").addEventListener("click", closeGradeSheet);
+  gradeSheetBackdrop.addEventListener("click", closeGradeSheet);
+  document.getElementById("btn-new-grade").addEventListener("click", () => { if (!isConfigured) return; openGradeSheet(null); });
+  document.getElementById("grade-search").addEventListener("input", renderGradeList);
+
+  function openGradeSheet(task){
+    editingGradeId = task ? task.id : null;
+    document.getElementById("grade-sheet-title").textContent = task ? "Grade Task" : "New Grade Task";
+    document.getElementById("gr-hood").value = task ? (task.subdivision||"") : "";
+    document.getElementById("gr-address").value = task ? (task.address||"") : "";
+    document.getElementById("gr-lot").value = task ? (task.lot||"") : "";
+    gradePendingPhotos = task && task.photos ? task.photos.slice() : [];
+    renderGradePhotoGrid();
+    const row = document.getElementById("grade-verify-row");
+    if (task && can.isManager()){
+      row.innerHTML = `<button class="btn btn-primary btn-block" id="btn-grade-verify">✓ Verify &amp; Clear</button>`;
+      row.querySelector("#btn-grade-verify").addEventListener("click", () => { if (confirm("Verify this task as done? It will be removed along with its photos.")) verifyGrade(task); });
+    } else { row.innerHTML = ""; }
+    gradeSheetBackdrop.classList.add("show");
+    gradeSheet.classList.add("show");
+  }
+
+  function renderGradePhotoGrid(){
+    const grid = document.getElementById("grade-photo-grid");
+    grid.querySelectorAll(".photo-thumb").forEach(el => el.remove());
+    const addBtn = grid.querySelector(".add-photo-btn");
+    gradePendingPhotos.forEach(p => {
+      const div = document.createElement("div");
+      div.className = "photo-thumb";
+      div.innerHTML = `<img src="${p.url || ''}">${p.uploading ? '<div class="uploading"><div class="spinner"></div></div>' : ''}<button class="rm" data-id="${p.id}">✕</button>`;
+      grid.insertBefore(div, addBtn);
+    });
+    grid.querySelectorAll(".rm").forEach(btn => {
+      btn.addEventListener("click", async (e) => {
+        e.preventDefault();
+        const photo = gradePendingPhotos.find(p => p.id === btn.dataset.id);
+        gradePendingPhotos = gradePendingPhotos.filter(p => p.id !== btn.dataset.id);
+        renderGradePhotoGrid();
+        if (photo && photo.storagePath){ try{ await storage.ref(photo.storagePath).delete(); }catch(e){ console.warn("photo delete failed", e); } }
+      });
+    });
+  }
+
+  document.getElementById("grade-photo-input").addEventListener("change", async (e) => {
+    const files = Array.from(e.target.files || []);
+    const taskIdForUpload = editingGradeId || uid("grade");
+    editingGradeId = editingGradeId || taskIdForUpload;
+    for (const f of files){
+      const photoId = uid("ph");
+      gradePendingPhotos.push({ id: photoId, url: "", storagePath: "", uploading: true });
+      renderGradePhotoGrid();
+      try{
+        const blob = await resizeToBlob(f, 1400, 0.72);
+        const path = `gradeTasks/${taskIdForUpload}/${photoId}.jpg`;
+        await storage.ref(path).put(blob);
+        const url = await storage.ref(path).getDownloadURL();
+        const idx = gradePendingPhotos.findIndex(p => p.id === photoId);
+        if (idx > -1) gradePendingPhotos[idx] = { id: photoId, url, storagePath: path, uploading: false };
+      }catch(err){
+        console.error("upload failed", err);
+        gradePendingPhotos = gradePendingPhotos.filter(p => p.id !== photoId);
+        alert("A photo failed to upload — check your connection and try again.");
+      }
+      renderGradePhotoGrid();
+    }
+    e.target.value = "";
+  });
+
+  document.getElementById("btn-save-grade").addEventListener("click", async () => {
+    const hood = document.getElementById("gr-hood").value.trim();
+    if (!hood){ document.getElementById("gr-hood").focus(); alert("Neighborhood is required."); return; }
+    const photos = gradePendingPhotos.filter(p => !p.uploading);
+    if (photos.length === 0){ alert("Add at least one verification photo before saving."); return; }
+    const btn = document.getElementById("btn-save-grade");
+    btn.disabled = true; btn.textContent = "Saving…";
+    const taskId = editingGradeId || uid("grade");
+    const existing = gradeCache.find(t => t.id === taskId);
+    const task = {
+      id: taskId,
+      subdivision: hood,
+      address: document.getElementById("gr-address").value.trim(),
+      lot: document.getElementById("gr-lot").value.trim(),
+      photos: photos,
+      createdByName: existing ? (existing.createdByName||actorLabel()) : actorLabel(),
+      createdAt: existing ? existing.createdAt : Date.now(),
+      updatedAt: Date.now()
+    };
+    try{ await db.collection("gradeTasks").doc(taskId).set(task); }
+    catch(err){ console.error(err); btn.disabled=false; btn.textContent="Save Grade Task"; alert("Couldn't save — check your connection and try again."); return; }
+    btn.disabled = false; btn.textContent = "Save Grade Task";
+    closeGradeSheet();
+    loadGradeTasks();
+  });
+
+  async function verifyGrade(task){
+    try{
+      if (task.photos){ await Promise.all(task.photos.filter(p => p.storagePath).map(p => storage.ref(p.storagePath).delete().catch(()=>{}))); }
+      await db.collection("gradeTasks").doc(task.id).delete();
+    }catch(err){ console.error(err); alert("Couldn't clear — check your connection and try again."); return; }
+    closeGradeSheet(); loadGradeTasks(); showToast("Verified & cleared");
+  }
+
+  async function loadGradeTasks(){
+    if (!isConfigured) return;
+    gradeListEl.innerHTML = `<div class="loading-row"><div class="spinner"></div>Loading grade tasks…</div>`;
+    try{
+      const snap = await db.collection("gradeTasks").orderBy("createdAt","desc").get();
+      gradeCache = snap.docs.map(d => d.data());
+    }catch(err){
+      console.error(err);
+      gradeListEl.innerHTML = `<div class="empty"><div class="icon">⚠</div><h3>Couldn't load grade tasks</h3><p>Check your connection and try again.</p></div>`;
+      return;
+    }
+    renderGradeList();
+  }
+
+  function renderGradeList(){
+    if (!gradeListEl) return;
+    const q = (document.getElementById("grade-search").value||"").toLowerCase().trim();
+    const filtered = gradeCache.filter(t => !q || (t.subdivision||"").toLowerCase().includes(q) || (t.address||"").toLowerCase().includes(q) || (t.lot||"").toLowerCase().includes(q));
+    if (filtered.length === 0){
+      gradeListEl.innerHTML = `<div class="empty"><div class="icon">🚜</div><h3>${gradeCache.length===0?"No grade tasks yet":"No matches"}</h3><p>${gradeCache.length===0?"Tap “+ New Grade Task” to create one.":"Try a different search."}</p></div>`;
+      return;
+    }
+    gradeListEl.innerHTML = filtered.map(t => `
+      <div class="job-card" data-gtid="${t.id}">
+        <div class="row1"><div>
+          ${t.subdivision ? `<div class="subdiv">${escapeHtml(t.subdivision)}</div>` : ""}
+          <div class="addr">${escapeHtml(t.address || (t.lot ? "Lot " + t.lot : "(no address)"))}</div>
+          ${t.address && t.lot ? `<div class="lot">Lot ${escapeHtml(t.lot)}</div>` : ""}
+        </div></div>
+        <div class="stats"><span class="pill photos">📷 ${(t.photos||[]).length}</span></div>
+        <div class="date">${t.createdByName ? "By " + escapeHtml(t.createdByName) + " · " : ""}${new Date(t.createdAt).toLocaleDateString(undefined,{month:'short',day:'numeric',year:'numeric'})}</div>
+      </div>`).join("");
+    gradeListEl.querySelectorAll("[data-gtid]").forEach(card => card.addEventListener("click", () => {
+      const t = gradeCache.find(x => x.id === card.dataset.gtid); if (t) openGradeSheet(t);
     }));
   }
 
