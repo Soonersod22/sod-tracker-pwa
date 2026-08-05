@@ -143,6 +143,12 @@
   .measure-row .mr-area{flex-shrink:0; min-width:74px; text-align:right; font-weight:750; font-size:13.5px; color:var(--turf);}
   .measure-row .mr-del{flex-shrink:0; border:none; background:none; color:var(--warn); font-size:18px; cursor:pointer; padding:2px 4px;}
   .measure-total{background:var(--turf-light); color:var(--turf); border-radius:12px; padding:14px; text-align:center; font-weight:800; font-size:20px; margin:14px 0;}
+  .access-row{display:flex; align-items:center; justify-content:space-between; gap:10px; padding:9px 0; border-bottom:1px solid var(--line);}
+  .access-q{font-size:14px; font-weight:600;}
+  .access-btns{display:flex; gap:6px; flex-shrink:0;}
+  .access-btn{border:1.5px solid var(--line); background:var(--card); color:var(--ink-soft); border-radius:8px; padding:6px 14px; font-size:13px; font-weight:700; cursor:pointer; font-family:inherit;}
+  .access-btn.yes{background:var(--turf); color:#fff; border-color:var(--turf);}
+  .access-btn.no{background:var(--warn); color:#fff; border-color:var(--warn);}
   .subtab-btn.active{background:var(--turf); color:#fff; border-color:var(--turf);}
   .pill.done{background:var(--turf); color:#fff;}
   .pill.upcoming{background:var(--hauler-light); color:var(--hauler);}
@@ -611,6 +617,14 @@
       <button class="btn btn-ghost" id="btn-add-tri" style="flex:1;">◺ Add Triangle</button>
     </div>
     <div class="measure-total" id="measure-total">Total: 0 sq ft</div>
+
+    <div class="field"><label>Notes / special instructions (optional)</label><textarea id="measure-notes" placeholder="Anything the crew should know about this yard"></textarea></div>
+
+    <div class="field">
+      <label>Access checklist (optional — for the crew's info)</label>
+      <div id="measure-access"></div>
+    </div>
+
     <hr style="border:none; border-top:1px solid var(--line); margin:6px 0 14px;">
     <div class="field"><label>Save as a measured yard (optional)</label><input id="measure-name" placeholder="Name / address — e.g. Selah Meadows Lot 4"></div>
     <button class="btn btn-primary btn-block" id="btn-save-measured">Save as Measured Yard</button>
@@ -1152,6 +1166,7 @@
       completedByName: existing && existing.completedByName ? existing.completedByName : "",
       measurements: existing && existing.measurements ? existing.measurements : [],
       measuredSqFt: existing && existing.measuredSqFt ? existing.measuredSqFt : 0,
+      access: existing && existing.access ? existing.access : {},
       createdByName: existing && existing.createdByName ? existing.createdByName : actorLabel(),
       createdAt: existing ? existing.createdAt : Date.now(),
       updatedAt: Date.now()
@@ -1231,9 +1246,11 @@
       const st = jobStatus(j);
       const dateStr = st === "completed" && j.completedAt
         ? "Completed " + new Date(j.completedAt).toLocaleDateString(undefined,{month:'short',day:'numeric',year:'numeric'})
-        : new Date(j.createdAt).toLocaleDateString(undefined,{month:'short',day:'numeric',year:'numeric'});
+        : st === "measured"
+          ? (j.createdByName ? "Measured by " + escapeHtml(j.createdByName) + " · " : "") + new Date(j.createdAt).toLocaleDateString(undefined,{month:'short',day:'numeric',year:'numeric'})
+          : new Date(j.createdAt).toLocaleDateString(undefined,{month:'short',day:'numeric',year:'numeric'});
       const statsHtml = st === "measured"
-        ? `<span class="pill" style="background:#E6EFE4; color:var(--turf);">${(j.measuredSqFt||0).toLocaleString()} sq ft measured</span> <span class="pill upcoming">📐 Measured</span>`
+        ? `<span class="pill" style="background:#E6EFE4; color:var(--turf);">${(j.measuredSqFt||0).toLocaleString()} sq ft measured</span> <span class="pill upcoming">📐 Measured</span> ${accessChipsHtml(j)}${j.notes ? ` <span class="pill photos">📝 Notes</span>` : ""}`
         : `<span class="pill">${j.bigRolls || 0} rolls</span>
            <span class="pill soil">${j.pallets || 0} pallets</span>
            <span class="pill" style="background:#E6EFE4; color:var(--turf);">${jobSqFt(j).toLocaleString()} sq ft</span>
@@ -2260,6 +2277,42 @@
   // MEASURE AREA (calculator + measured yards)
   // ==================================================
   let editingMeasuredId = null;
+  let measureAccess = {}; // { key: true|false } for answered questions only
+  const ACCESS_QUESTIONS = [
+    ["semiAccess", "Can a semi access?", "Semi"],
+    ["crewTruckAccess", "Can crew & truck access?", "Crew/Truck"],
+    ["installMachineAccess", "Can install machines access?", "Machines"],
+    ["bigRollsUsable", "Big rolls usable?", "Big rolls"],
+    ["palletsOnly", "Only / largely pallets needed?", "Pallets only"]
+  ];
+  function renderMeasureAccess(){
+    document.getElementById("measure-access").innerHTML = ACCESS_QUESTIONS.map(([k,q]) => `
+      <div class="access-row">
+        <span class="access-q">${q}</span>
+        <span class="access-btns">
+          <button type="button" class="access-btn${measureAccess[k]===true?" yes":""}" data-ak="${k}" data-av="yes">Yes</button>
+          <button type="button" class="access-btn${measureAccess[k]===false?" no":""}" data-ak="${k}" data-av="no">No</button>
+        </span>
+      </div>`).join("");
+    document.querySelectorAll("#measure-access .access-btn").forEach(b => b.addEventListener("click", () => {
+      const k = b.dataset.ak, v = (b.dataset.av === "yes");
+      measureAccess[k] = (measureAccess[k] === v) ? undefined : v; // tap the same answer again to clear it
+      renderMeasureAccess();
+    }));
+  }
+  // Keep only answered (true/false) items — Firestore rejects undefined.
+  function cleanAccess(a){
+    const out = {};
+    ACCESS_QUESTIONS.forEach(([k]) => { if (a[k] === true || a[k] === false) out[k] = a[k]; });
+    return out;
+  }
+  // Compact chips of answered access items, for the Measured card.
+  function accessChipsHtml(job){
+    const a = job.access || {};
+    return ACCESS_QUESTIONS.filter(([k]) => a[k] === true || a[k] === false)
+      .map(([k,q,short]) => `<span class="pill" style="background:${a[k]?"#E6EFE4":"var(--warn-light)"}; color:${a[k]?"var(--turf)":"var(--warn)"};">${short} ${a[k]?"✓":"✗"}</span>`)
+      .join("");
+  }
   const measureSheet = document.getElementById("measure-sheet");
   const measureBackdrop = document.getElementById("measure-sheet-backdrop");
   const measureRowsEl = document.getElementById("measure-rows");
@@ -2319,6 +2372,9 @@
     measureRowsEl.innerHTML = "";
     document.getElementById("measure-sheet-title").textContent = job ? "Measured Yard" : "Measure Area";
     document.getElementById("measure-name").value = job ? (job.address || job.subdivision || "") : "";
+    document.getElementById("measure-notes").value = job ? (job.notes || "") : "";
+    measureAccess = (job && job.access) ? Object.assign({}, job.access) : {};
+    renderMeasureAccess();
     const rows = (job && job.measurements) ? job.measurements : [];
     if (rows.length) rows.forEach(r => addMeasureRow(r.type, r.a, r.b));
     else addMeasureRow("rect");
@@ -2357,10 +2413,11 @@
       bigRolls: existing ? (existing.bigRolls||"0") : "0",
       pallets: existing ? (existing.pallets||"0") : "0",
       mapsLink: existing ? (existing.mapsLink||"") : "",
-      notes: existing ? (existing.notes||"") : "",
+      notes: document.getElementById("measure-notes").value.trim(),
       photos: existing ? (existing.photos||[]) : [],
       measurements: rows,
       measuredSqFt: total,
+      access: cleanAccess(measureAccess),
       status: "measured",
       completedAt: null, completedByName: "",
       createdByName: existing ? (existing.createdByName||actorLabel()) : actorLabel(),
