@@ -128,12 +128,21 @@
   .job-card .date{font-size:12px; color:var(--ink-soft); margin-top:8px;}
   .job-card.completed{opacity:0.82;}
 
-  .subtabs{display:flex; gap:6px; margin-bottom:14px;}
+  .subtabs{display:flex; gap:6px; margin-bottom:14px; overflow-x:auto;}
+  .subtabs::-webkit-scrollbar{display:none;}
   .subtab-btn{
-    flex:1; border:1.5px solid var(--line); background:var(--card); padding:9px 6px; border-radius:10px;
+    flex:1 0 auto; min-width:76px; border:1.5px solid var(--line); background:var(--card); padding:9px 8px; border-radius:10px;
     font-size:13px; font-weight:650; color:var(--ink-soft); cursor:pointer; font-family:inherit;
-    white-space:nowrap; overflow:hidden; text-overflow:ellipsis;
+    white-space:nowrap;
   }
+  /* Measure-area calculator */
+  .measure-row{display:flex; align-items:center; gap:8px; margin-bottom:10px;}
+  .measure-row .mr-type{flex-shrink:0; width:30px; text-align:center; font-size:18px;}
+  .measure-row input{width:100%; padding:10px 8px; border-radius:9px; border:1.5px solid var(--line); font-size:16px; font-family:inherit; text-align:center; background:var(--card); color:var(--ink);}
+  .measure-row .mr-x{flex-shrink:0; color:var(--ink-soft); font-weight:700;}
+  .measure-row .mr-area{flex-shrink:0; min-width:74px; text-align:right; font-weight:750; font-size:13.5px; color:var(--turf);}
+  .measure-row .mr-del{flex-shrink:0; border:none; background:none; color:var(--warn); font-size:18px; cursor:pointer; padding:2px 4px;}
+  .measure-total{background:var(--turf-light); color:var(--turf); border-radius:12px; padding:14px; text-align:center; font-weight:800; font-size:20px; margin:14px 0;}
   .subtab-btn.active{background:var(--turf); color:#fff; border-color:var(--turf);}
   .pill.done{background:var(--turf); color:#fff;}
   .pill.upcoming{background:var(--hauler-light); color:var(--hauler);}
@@ -373,9 +382,11 @@
     <section id="view-install" class="view active">
       <div class="fab-row">
         <button class="btn btn-primary" id="btn-new-job">+ New Job</button>
+        <button class="btn btn-ghost" id="btn-measure" title="Measure an area">📐 Measure</button>
         <button class="btn btn-ghost" id="btn-export-jobs" title="Export to CSV">⬇ CSV</button>
       </div>
-      <div class="subtabs">
+      <div class="subtabs" id="job-subtabs">
+        <button class="subtab-btn" data-jobfilter="measured" id="subtab-measured">Measured</button>
         <button class="subtab-btn" data-jobfilter="upcoming" id="subtab-upcoming">Upcoming</button>
         <button class="subtab-btn active" data-jobfilter="open" id="subtab-open">Open</button>
         <button class="subtab-btn" data-jobfilter="completed" id="subtab-completed">Completed</button>
@@ -586,6 +597,24 @@
     <div class="field"><label>Notes</label><input id="sv-notes" placeholder="Optional"></div>
     <button class="btn btn-primary btn-block" id="btn-save-service">Save Service</button>
     <div id="service-delete-row" style="margin-top:12px;"></div>
+  </div>
+</div>
+
+<div class="sheet-backdrop" id="measure-sheet-backdrop"></div>
+<div class="sheet" id="measure-sheet">
+  <div class="sheet-header"><h2 id="measure-sheet-title">Measure Area</h2><button class="close-x" id="measure-sheet-close">✕</button></div>
+  <div class="sheet-body">
+    <div class="hint" style="margin-bottom:12px;">Add each piece of the area. Rectangles = Length × Width. Triangles = Base × Height (the app halves it for you). The total adds up automatically.</div>
+    <div id="measure-rows"></div>
+    <div class="field-row" style="gap:8px; margin-bottom:4px;">
+      <button class="btn btn-ghost" id="btn-add-rect" style="flex:1;">▭ Add Rectangle</button>
+      <button class="btn btn-ghost" id="btn-add-tri" style="flex:1;">◺ Add Triangle</button>
+    </div>
+    <div class="measure-total" id="measure-total">Total: 0 sq ft</div>
+    <hr style="border:none; border-top:1px solid var(--line); margin:6px 0 14px;">
+    <div class="field"><label>Save as a measured yard (optional)</label><input id="measure-name" placeholder="Name / address — e.g. Selah Meadows Lot 4"></div>
+    <button class="btn btn-primary btn-block" id="btn-save-measured">Save as Measured Yard</button>
+    <div id="measure-actions" style="margin-top:10px;"></div>
   </div>
 </div>
 
@@ -871,9 +900,10 @@
   // A job counts as "open" unless it has been explicitly marked completed.
   function isCompleted(j){ return j && j.status === "completed"; }
   function isUpcoming(j){ return j && j.status === "upcoming"; }
-  // The lifecycle stage of a job: "upcoming" | "open" | "completed".
-  // (An "active" job is upcoming OR open — i.e. anything not completed.)
-  function jobStatus(j){ return isCompleted(j) ? "completed" : (isUpcoming(j) ? "upcoming" : "open"); }
+  function isMeasured(j){ return j && j.status === "measured"; }
+  // The lifecycle stage of a job: "measured" | "upcoming" | "open" | "completed".
+  // A "measured yard" is a saved measurement, not an open job yet.
+  function jobStatus(j){ return isCompleted(j) ? "completed" : (isUpcoming(j) ? "upcoming" : (isMeasured(j) ? "measured" : "open")); }
   // Square footage: 1 big roll = 400 sq ft, 1 pallet = 500 sq ft. (Change here if these ever change.)
   const SQFT_PER_ROLL = 400, SQFT_PER_PALLET = 500;
   function sqFt(bigRolls, pallets){ return (parseInt(bigRolls,10)||0) * SQFT_PER_ROLL + (parseInt(pallets,10)||0) * SQFT_PER_PALLET; }
@@ -930,13 +960,16 @@
     document.getElementById("job-tabs").style.display = "";
 
     // Only managers get Upcoming / Completed sub-tabs and the exports.
+    // Measured is available to the whole crew (they do the measuring).
     document.getElementById("subtab-upcoming").classList.toggle("hidden-by-role", !mgr);
     document.getElementById("subtab-completed").classList.toggle("hidden-by-role", !mgr);
+    document.getElementById("subtab-measured").classList.toggle("hidden-by-role", !jobs);
+    document.getElementById("btn-measure").classList.toggle("hidden-by-role", !jobs);
     document.getElementById("btn-export-jobs").classList.toggle("hidden-by-role", !mgr);
     document.getElementById("btn-export-drops").classList.toggle("hidden-by-role", !mgr);
 
-    // Non-managers are pinned to the Open sub-tab.
-    if (!mgr && currentJobFilter !== "open"){
+    // Non-managers can be on Open or Measured; anything else falls back to Open.
+    if (!mgr && currentJobFilter !== "open" && currentJobFilter !== "measured"){
       currentJobFilter = "open";
       document.querySelectorAll("[data-jobfilter]").forEach(b => b.classList.toggle("active", b.dataset.jobfilter === "open"));
     }
@@ -1117,6 +1150,8 @@
       status: existing && existing.status ? existing.status : creatingStatus,
       completedAt: existing && existing.completedAt ? existing.completedAt : null,
       completedByName: existing && existing.completedByName ? existing.completedByName : "",
+      measurements: existing && existing.measurements ? existing.measurements : [],
+      measuredSqFt: existing && existing.measuredSqFt ? existing.measuredSqFt : 0,
       createdByName: existing && existing.createdByName ? existing.createdByName : actorLabel(),
       createdAt: existing ? existing.createdAt : Date.now(),
       updatedAt: Date.now()
@@ -1164,22 +1199,23 @@
   }
 
   function renderJobList(){
-    // Keep the Upcoming / Open / Completed sub-tab counts current.
-    const counts = { upcoming:0, open:0, completed:0 };
+    // Keep the Measured / Upcoming / Open / Completed sub-tab counts current.
+    const counts = { measured:0, upcoming:0, open:0, completed:0 };
     jobsCache.forEach(j => counts[jobStatus(j)]++);
+    document.getElementById("subtab-measured").textContent = "Measured" + (counts.measured ? " (" + counts.measured + ")" : "");
     document.getElementById("subtab-upcoming").textContent = "Upcoming" + (counts.upcoming ? " (" + counts.upcoming + ")" : "");
     document.getElementById("subtab-open").textContent = "Open" + (counts.open ? " (" + counts.open + ")" : "");
     document.getElementById("subtab-completed").textContent = "Completed" + (counts.completed ? " (" + counts.completed + ")" : "");
 
     const q = (document.getElementById("job-search").value || "").toLowerCase().trim();
     let list = jobsCache.filter(j => jobStatus(j) === currentJobFilter);
-    // Completed jobs read best newest-finished-first.
     if (currentJobFilter === "completed") list = list.slice().sort((a,b) => (b.completedAt||b.createdAt||0) - (a.completedAt||a.createdAt||0));
     const filtered = list.filter(j => !q || (j.address||"").toLowerCase().includes(q) || (j.lot||"").toLowerCase().includes(q) || (j.subdivision||"").toLowerCase().includes(q));
 
     if (filtered.length === 0){
       const noneYet = list.length === 0;
       const emptyByFilter = {
+        measured:  { icon:"📐", h3:"No measured yards yet", p:"Tap “📐 Measure” to measure an area and save it here." },
         upcoming:  { icon:"🗓", h3:"No upcoming jobs", p:"Tap “+ New Upcoming Job” to schedule one before it goes to the crew." },
         open:      { icon:"🌱", h3:"No open jobs", p:"Tap “+ New Job” to create your first job folder." },
         completed: { icon:"✅", h3:"No completed jobs yet", p:"Jobs you mark complete will move here." }
@@ -1188,13 +1224,22 @@
       jobListEl.innerHTML = `<div class="empty"><div class="icon">${e.icon}</div><h3>${noneYet ? e.h3 : "No matches"}</h3><p>${noneYet ? e.p : "Try a different search."}</p></div>`;
       return;
     }
-    const totalSqFt = filtered.reduce((s, j) => s + jobSqFt(j), 0);
-    const totalBanner = `<div style="background:var(--card); border:1px solid var(--line); border-radius:11px; padding:11px 14px; margin-bottom:12px; font-size:14px; font-weight:650; box-shadow:var(--shadow);">Total ${currentJobFilter} work: <span style="color:var(--turf); font-weight:750;">${fmtSqFt(totalSqFt)}</span> <span style="color:var(--ink-soft); font-weight:600;">· ${filtered.length} job${filtered.length===1?"":"s"}</span></div>`;
+    const measuredMode = currentJobFilter === "measured";
+    const totalSqFt = filtered.reduce((s, j) => s + (measuredMode ? (j.measuredSqFt||0) : jobSqFt(j)), 0);
+    const totalBanner = `<div style="background:var(--card); border:1px solid var(--line); border-radius:11px; padding:11px 14px; margin-bottom:12px; font-size:14px; font-weight:650; box-shadow:var(--shadow);">Total ${currentJobFilter} ${measuredMode?"area":"work"}: <span style="color:var(--turf); font-weight:750;">${fmtSqFt(Math.round(totalSqFt))}</span> <span style="color:var(--ink-soft); font-weight:600;">· ${filtered.length} ${measuredMode?"yard":"job"}${filtered.length===1?"":"s"}</span></div>`;
     jobListEl.innerHTML = totalBanner + filtered.map(j => {
       const st = jobStatus(j);
       const dateStr = st === "completed" && j.completedAt
         ? "Completed " + new Date(j.completedAt).toLocaleDateString(undefined,{month:'short',day:'numeric',year:'numeric'})
         : new Date(j.createdAt).toLocaleDateString(undefined,{month:'short',day:'numeric',year:'numeric'});
+      const statsHtml = st === "measured"
+        ? `<span class="pill" style="background:#E6EFE4; color:var(--turf);">${(j.measuredSqFt||0).toLocaleString()} sq ft measured</span> <span class="pill upcoming">📐 Measured</span>`
+        : `<span class="pill">${j.bigRolls || 0} rolls</span>
+           <span class="pill soil">${j.pallets || 0} pallets</span>
+           <span class="pill" style="background:#E6EFE4; color:var(--turf);">${jobSqFt(j).toLocaleString()} sq ft</span>
+           ${j.photos && j.photos.length ? `<span class="pill photos">📷 ${j.photos.length}</span>` : ""}
+           ${st === "upcoming" ? `<span class="pill upcoming">🗓 Upcoming</span>` : ""}
+           ${st === "completed" ? `<span class="pill done">✓ Completed</span>` : ""}`;
       return `
       <div class="job-card${st === "completed" ? " completed" : ""}" data-id="${j.id}">
         <div class="row1">
@@ -1204,21 +1249,15 @@
             ${j.lot ? `<div class="lot">Lot ${escapeHtml(j.lot)}</div>` : ""}
           </div>
         </div>
-        <div class="stats">
-          <span class="pill">${j.bigRolls || 0} rolls</span>
-          <span class="pill soil">${j.pallets || 0} pallets</span>
-          <span class="pill" style="background:#E6EFE4; color:var(--turf);">${jobSqFt(j).toLocaleString()} sq ft</span>
-          ${j.photos && j.photos.length ? `<span class="pill photos">📷 ${j.photos.length}</span>` : ""}
-          ${st === "upcoming" ? `<span class="pill upcoming">🗓 Upcoming</span>` : ""}
-          ${st === "completed" ? `<span class="pill done">✓ Completed</span>` : ""}
-        </div>
+        <div class="stats">${statsHtml}</div>
         <div class="date">${dateStr}</div>
       </div>`;
     }).join("");
     jobListEl.querySelectorAll(".job-card").forEach(card => {
       card.addEventListener("click", () => {
         const job = jobsCache.find(j => j.id === card.dataset.id);
-        if (job) openJobDetail(job);
+        if (!job) return;
+        if (isMeasured(job)) openMeasureSheet(job); else openJobDetail(job);
       });
     });
   }
@@ -1259,6 +1298,7 @@
         <div class="num" style="color:var(--turf);">${fmtSqFt(jobSqFt(job))}</div>
         <div class="lbl">Total Square Footage (auto-calculated)</div>
       </div>
+      ${job.measuredSqFt ? `<div class="logged-by">📐 Measured area on file: ${(job.measuredSqFt).toLocaleString()} sq ft</div>` : ""}
       ${job.mapsLink ? `
       <a class="map-link" href="${escapeHtml(job.mapsLink)}" target="_blank" rel="noopener">
         <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M21 10c0 7-9 13-9 13s-9-6-9-13a9 9 0 0 1 18 0z"/><circle cx="12" cy="10" r="3"/></svg>
@@ -2214,6 +2254,149 @@
     catch(err){ console.error(err); alert("Couldn't update — check your connection and try again."); return; }
     closeServiceSheet(); await loadServices(); showToast(flag ? "Deletion requested — a manager will review it" : "Request cancelled");
     if (currentServiceVehicle) openVehicleDetail(currentServiceVehicle);
+  }
+
+  // ==================================================
+  // MEASURE AREA (calculator + measured yards)
+  // ==================================================
+  let editingMeasuredId = null;
+  const measureSheet = document.getElementById("measure-sheet");
+  const measureBackdrop = document.getElementById("measure-sheet-backdrop");
+  const measureRowsEl = document.getElementById("measure-rows");
+  function closeMeasureSheet(){ measureBackdrop.classList.remove("show"); measureSheet.classList.remove("show"); }
+  document.getElementById("measure-sheet-close").addEventListener("click", closeMeasureSheet);
+  measureBackdrop.addEventListener("click", closeMeasureSheet);
+  document.getElementById("btn-add-rect").addEventListener("click", () => addMeasureRow("rect"));
+  document.getElementById("btn-add-tri").addEventListener("click", () => addMeasureRow("tri"));
+  document.getElementById("btn-measure").addEventListener("click", () => { if (!isConfigured) return; openMeasureSheet(null); });
+
+  function addMeasureRow(type, a, b){
+    const row = document.createElement("div");
+    row.className = "measure-row";
+    row.dataset.type = type;
+    const labA = type === "rect" ? "Length" : "Base";
+    const labB = type === "rect" ? "Width" : "Height";
+    row.innerHTML = `
+      <span class="mr-type" title="${type === "rect" ? "Rectangle" : "Triangle"}">${type === "rect" ? "▭" : "◺"}</span>
+      <input type="number" inputmode="decimal" class="mr-a" placeholder="${labA}" value="${a!=null?a:""}">
+      <span class="mr-x">×</span>
+      <input type="number" inputmode="decimal" class="mr-b" placeholder="${labB}" value="${b!=null?b:""}">
+      <span class="mr-area">0</span>
+      <button type="button" class="mr-del" title="Remove">✕</button>`;
+    measureRowsEl.appendChild(row);
+    row.querySelectorAll("input").forEach(inp => inp.addEventListener("input", recomputeMeasure));
+    row.querySelector(".mr-del").addEventListener("click", () => { row.remove(); recomputeMeasure(); });
+    recomputeMeasure();
+  }
+
+  function rowArea(row){
+    const a = parseFloat(row.querySelector(".mr-a").value) || 0;
+    const b = parseFloat(row.querySelector(".mr-b").value) || 0;
+    return row.dataset.type === "tri" ? (a*b)/2 : a*b;
+  }
+  function recomputeMeasure(){
+    let total = 0;
+    measureRowsEl.querySelectorAll(".measure-row").forEach(row => {
+      const area = rowArea(row);
+      total += area;
+      row.querySelector(".mr-area").textContent = (Math.round(area*100)/100).toLocaleString() + " sf";
+    });
+    document.getElementById("measure-total").textContent = "Total: " + (Math.round(total*100)/100).toLocaleString() + " sq ft";
+  }
+  function collectMeasureRows(){
+    const rows = [];
+    measureRowsEl.querySelectorAll(".measure-row").forEach(row => {
+      const a = parseFloat(row.querySelector(".mr-a").value) || 0;
+      const b = parseFloat(row.querySelector(".mr-b").value) || 0;
+      if (a || b) rows.push({ type: row.dataset.type, a, b });
+    });
+    return rows;
+  }
+  function measureTotalOf(rows){ return rows.reduce((s,r) => s + (r.type === "tri" ? (r.a*r.b)/2 : r.a*r.b), 0); }
+
+  function openMeasureSheet(job){
+    editingMeasuredId = job ? job.id : null;
+    measureRowsEl.innerHTML = "";
+    document.getElementById("measure-sheet-title").textContent = job ? "Measured Yard" : "Measure Area";
+    document.getElementById("measure-name").value = job ? (job.address || job.subdivision || "") : "";
+    const rows = (job && job.measurements) ? job.measurements : [];
+    if (rows.length) rows.forEach(r => addMeasureRow(r.type, r.a, r.b));
+    else addMeasureRow("rect");
+    document.getElementById("btn-save-measured").textContent = job ? "Update Measured Yard" : "Save as Measured Yard";
+    renderMeasureActions(job);
+    recomputeMeasure();
+    measureBackdrop.classList.add("show");
+    measureSheet.classList.add("show");
+  }
+
+  function renderMeasureActions(job){
+    const el = document.getElementById("measure-actions");
+    if (!job){ el.innerHTML = ""; return; }
+    el.innerHTML = `
+      <button class="btn btn-primary btn-block" id="btn-measured-to-open">Move to Open (make it a job)</button>
+      <button class="btn btn-danger btn-block" id="btn-measured-del" style="margin-top:8px;">Delete Measured Yard</button>`;
+    el.querySelector("#btn-measured-to-open").addEventListener("click", () => measuredToOpen(job));
+    el.querySelector("#btn-measured-del").addEventListener("click", () => { if (confirm("Delete this measured yard?")) deleteMeasured(job.id); });
+  }
+
+  document.getElementById("btn-save-measured").addEventListener("click", async () => {
+    const name = document.getElementById("measure-name").value.trim();
+    const rows = collectMeasureRows();
+    if (rows.length === 0){ alert("Add at least one measurement first."); return; }
+    if (!name){ document.getElementById("measure-name").focus(); alert("Give it a name (which yard is this?) so you can find it later."); return; }
+    const btn = document.getElementById("btn-save-measured");
+    btn.disabled = true; btn.textContent = "Saving…";
+    const jobId = editingMeasuredId || uid("job");
+    const existing = jobsCache.find(j => j.id === jobId);
+    const total = Math.round(measureTotalOf(rows) * 100) / 100;
+    const job = {
+      id: jobId,
+      address: name,
+      subdivision: existing ? (existing.subdivision||"") : "",
+      lot: existing ? (existing.lot||"") : "",
+      bigRolls: existing ? (existing.bigRolls||"0") : "0",
+      pallets: existing ? (existing.pallets||"0") : "0",
+      mapsLink: existing ? (existing.mapsLink||"") : "",
+      notes: existing ? (existing.notes||"") : "",
+      photos: existing ? (existing.photos||[]) : [],
+      measurements: rows,
+      measuredSqFt: total,
+      status: "measured",
+      completedAt: null, completedByName: "",
+      createdByName: existing ? (existing.createdByName||actorLabel()) : actorLabel(),
+      createdAt: existing ? existing.createdAt : Date.now(),
+      updatedAt: Date.now()
+    };
+    try{ await db.collection("jobs").doc(jobId).set(job); }
+    catch(err){ console.error(err); btn.disabled=false; btn.textContent = editingMeasuredId?"Update Measured Yard":"Save as Measured Yard"; alert("Couldn't save — check your connection and try again."); return; }
+    btn.disabled = false;
+    closeMeasureSheet();
+    currentJobFilter = "measured";
+    document.querySelectorAll("[data-jobfilter]").forEach(b => b.classList.toggle("active", b.dataset.jobfilter === "measured"));
+    updateNewJobButton();
+    await loadJobs();
+    showToast("Saved to Measured");
+  });
+
+  async function deleteMeasured(jobId){
+    try{ await db.collection("jobs").doc(jobId).delete(); }
+    catch(err){ console.error(err); alert("Couldn't delete — check your connection and try again."); return; }
+    closeMeasureSheet(); await loadJobs(); showToast("Measured yard deleted");
+  }
+
+  async function measuredToOpen(job){
+    const clash = jobsCache.find(j => j.id !== job.id && !isCompleted(j) && !isMeasured(j) && normAddr(j.address) === normAddr(job.address));
+    if (clash){ alert("That address already has an active job:\n\n“" + clash.address + "”\n\nComplete or edit that one first."); return; }
+    const btn = document.getElementById("btn-measured-to-open");
+    if (btn){ btn.disabled = true; btn.textContent = "Moving…"; }
+    try{ await db.collection("jobs").doc(job.id).update({ status: "open", updatedAt: Date.now() }); }
+    catch(err){ console.error(err); if (btn){ btn.disabled=false; btn.textContent="Move to Open (make it a job)"; } alert("Couldn't move — check your connection and try again."); return; }
+    closeMeasureSheet();
+    currentJobFilter = "open";
+    document.querySelectorAll("[data-jobfilter]").forEach(b => b.classList.toggle("active", b.dataset.jobfilter === "open"));
+    updateNewJobButton();
+    await loadJobs();
+    showToast("Moved to Open — it's now a job");
   }
 
   // ---------------- Init ----------------
