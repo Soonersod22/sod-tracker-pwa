@@ -64,6 +64,13 @@ service cloud.firestore {
       allow delete:         if isManager();
     }
 
+    // Fleet vehicles (trucks & equipment) — same access model as parts.
+    match /vehicles/{vehicleId} {
+      allow read:           if canShop();
+      allow create, update: if canShop() && request.resource.data.size() <= 40;
+      allow delete:         if isManager();
+    }
+
     match /users/{uid} {
       // A user can read their own role; managers can read everyone (crew list).
       allow get:  if signedIn() && (request.auth.uid == uid || isManager());

@@ -286,6 +286,9 @@
   .pin-card .pin-open svg{color:var(--soil); flex-shrink:0;}
   .pin-card .pin-name{font-weight:700; font-size:15.5px; white-space:nowrap; overflow:hidden; text-overflow:ellipsis;}
   .pin-card .pin-edit{border:1px solid var(--line); background:var(--cream); color:var(--ink-soft); border-radius:8px; padding:8px 12px; font-size:13px; font-weight:650; cursor:pointer; font-family:inherit; flex-shrink:0;}
+  .cat-group{margin-bottom:16px;}
+  .cat-header{display:flex; justify-content:space-between; align-items:baseline; gap:8px; font-weight:800; font-size:13px; text-transform:uppercase; letter-spacing:.03em; color:var(--soil); margin:4px 2px 8px 2px;}
+  .cat-header .cat-count{font-size:11.5px; font-weight:600; color:var(--ink-soft); text-transform:none; letter-spacing:0;}
   .part-card{background:var(--card); border:1px solid var(--line); border-radius:12px; box-shadow:var(--shadow); padding:12px 14px; margin-bottom:10px; display:flex; align-items:center; gap:12px;}
   .part-card.low{border-color:#E9C2A6;}
   .part-card .p-main{flex:1; min-width:0; cursor:pointer;}
@@ -434,7 +437,10 @@
         <div id="part-list"></div>
       </div>
       <div id="shop-fleet" class="shop-view" style="display:none;">
-        <div class="empty"><div class="icon">🚛</div><h3>Fleet &amp; Service</h3><p>Coming next — your machines and trucks with a service history.</p></div>
+        <div class="fab-row">
+          <button class="btn btn-primary btn-block" id="btn-new-vehicle">+ Add Vehicle</button>
+        </div>
+        <div id="vehicle-list"></div>
       </div>
     </section>
   </main>
@@ -519,7 +525,10 @@
   <div class="sheet-header"><h2 id="part-sheet-title">Add Part</h2><button class="close-x" id="part-sheet-close">✕</button></div>
   <div class="sheet-body">
     <div class="field"><label>Part name *</label><input id="pt-name" placeholder="e.g. Tire 11R22.5"></div>
-    <div class="field"><label>Category</label><input id="pt-category" placeholder="e.g. Tires, Filters, Fluids"></div>
+    <div class="field"><label>Category</label>
+      <input id="pt-category" list="pt-cat-options" placeholder="Pick a category or type a new one">
+      <datalist id="pt-cat-options"></datalist>
+    </div>
     <div class="field-row">
       <div class="field"><label>Quantity on hand</label><input id="pt-qty" type="number" inputmode="numeric" placeholder="0"></div>
       <div class="field"><label>Low-stock at</label><input id="pt-low" type="number" inputmode="numeric" placeholder="e.g. 4"></div>
@@ -528,6 +537,32 @@
     <div class="field"><label>Part # / notes</label><input id="pt-notes" placeholder="Optional"></div>
     <button class="btn btn-primary btn-block" id="btn-save-part">Save Part</button>
     <div id="part-delete-row" style="margin-top:12px;"></div>
+  </div>
+</div>
+
+<div class="sheet-backdrop" id="vehicle-sheet-backdrop"></div>
+<div class="sheet" id="vehicle-sheet">
+  <div class="sheet-header"><h2 id="vehicle-sheet-title">Add Vehicle</h2><button class="close-x" id="vehicle-sheet-close">✕</button></div>
+  <div class="sheet-body">
+    <div class="field">
+      <label>Type</label>
+      <div class="subtabs">
+        <button type="button" class="subtab-btn active" data-vtype="truck" id="vt-truck">🚛 Truck</button>
+        <button type="button" class="subtab-btn" data-vtype="equipment" id="vt-equipment">🚜 Equipment</button>
+      </div>
+    </div>
+    <div class="field"><label>Name *</label><input id="v-name" placeholder="e.g. Truck 12 / Bobcat S650"></div>
+    <div id="v-truck-fields">
+      <div class="field-row">
+        <div class="field"><label>Last 4 of VIN</label><input id="v-vin" maxlength="4" inputmode="numeric" placeholder="1234"></div>
+        <div class="field"><label>Year</label><input id="v-year" type="number" inputmode="numeric" placeholder="2020"></div>
+      </div>
+    </div>
+    <div id="v-equip-fields" style="display:none;">
+      <div class="field"><label>Number (#)</label><input id="v-number" placeholder="e.g. EQ-7"></div>
+    </div>
+    <button class="btn btn-primary btn-block" id="btn-save-vehicle">Save Vehicle</button>
+    <div id="vehicle-delete-row" style="margin-top:12px;"></div>
   </div>
 </div>
 
@@ -735,7 +770,7 @@
     if (can.manageJobs()) loadJobs();
     if (can.manageDrops()) loadDrops();
     loadPins(); // available to every signed-in role
-    if (can.useShop()) loadParts();
+    if (can.useShop()){ loadParts(); loadVehicles(); }
   }
 
   function showLogin(){
@@ -1644,6 +1679,18 @@
   const partSheet = document.getElementById("part-sheet");
   const partSheetBackdrop = document.getElementById("part-sheet-backdrop");
 
+  // Suggested categories (folders) — merged with any categories already in use.
+  const DEFAULT_PART_CATEGORIES = ["Tires", "KWMI Parts", "Donkey Parts", "Truck Parts", "Misc Tools/Parts"];
+  function allPartCategories(){
+    const set = new Set(DEFAULT_PART_CATEGORIES);
+    partsCache.forEach(p => { if (p.category) set.add(p.category); });
+    return Array.from(set).sort((a,b) => a.toLowerCase().localeCompare(b.toLowerCase()));
+  }
+  function populatePartCategoryOptions(){
+    document.getElementById("pt-cat-options").innerHTML =
+      allPartCategories().map(c => `<option value="${escapeHtml(c)}"></option>`).join("");
+  }
+
   function closePartSheet(){ partSheetBackdrop.classList.remove("show"); partSheet.classList.remove("show"); }
   document.getElementById("part-sheet-close").addEventListener("click", closePartSheet);
   partSheetBackdrop.addEventListener("click", closePartSheet);
@@ -1659,6 +1706,7 @@
     document.getElementById("pt-low").value = part ? (part.lowStock!=null?part.lowStock:"") : "";
     document.getElementById("pt-location").value = part ? (part.location||"") : "";
     document.getElementById("pt-notes").value = part ? (part.notes||"") : "";
+    populatePartCategoryOptions();
     renderPartDeleteRow(part);
     partSheetBackdrop.classList.add("show");
     partSheet.classList.add("show");
@@ -1771,23 +1819,15 @@
 
   function isLowStock(p){ const low = parseInt(p.lowStock, 10) || 0; return low > 0 && (parseInt(p.quantity, 10) || 0) <= low; }
 
-  function renderPartList(){
-    const q = (document.getElementById("part-search").value || "").toLowerCase().trim();
-    const filtered = partsCache.filter(p => !q || (p.name||"").toLowerCase().includes(q) || (p.category||"").toLowerCase().includes(q));
-    if (filtered.length === 0){
-      partListEl.innerHTML = `<div class="empty"><div class="icon">🧰</div><h3>${partsCache.length===0 ? "No parts yet" : "No matches"}</h3><p>${partsCache.length===0 ? "Tap “+ Add Part” to start your inventory." : "Try a different search."}</p></div>`;
-      return;
-    }
-    partListEl.innerHTML = filtered.map(p => {
-      const qty = parseInt(p.quantity, 10) || 0;
-      const low = isLowStock(p);
-      return `
+  function partCardHtml(p){
+    const qty = parseInt(p.quantity, 10) || 0;
+    const low = isLowStock(p);
+    return `
       <div class="part-card${low ? " low" : ""}" data-id="${p.id}">
         <div class="p-main" data-edit="${p.id}">
           <div class="p-name">${escapeHtml(p.name)}</div>
           <div class="p-meta">
-            ${p.category ? `<span>${escapeHtml(p.category)}</span>` : ""}
-            ${p.location ? `<span>· ${escapeHtml(p.location)}</span>` : ""}
+            ${p.location ? `<span>${escapeHtml(p.location)}</span>` : ""}
             ${low ? `<span class="pill low">Low stock</span>` : ""}
             ${p.pendingDelete ? `<span class="pill pending">Pending deletion</span>` : ""}
           </div>
@@ -1797,6 +1837,31 @@
           <span class="qty-num">${qty}</span>
           <button class="qty-btn" data-plus="${p.id}">+</button>
         </div>
+      </div>`;
+  }
+
+  function renderPartList(){
+    const q = (document.getElementById("part-search").value || "").toLowerCase().trim();
+    const filtered = partsCache.filter(p => !q || (p.name||"").toLowerCase().includes(q) || (p.category||"").toLowerCase().includes(q));
+    if (filtered.length === 0){
+      partListEl.innerHTML = `<div class="empty"><div class="icon">🧰</div><h3>${partsCache.length===0 ? "No parts yet" : "No matches"}</h3><p>${partsCache.length===0 ? "Tap “+ Add Part” to start your inventory." : "Try a different search."}</p></div>`;
+      return;
+    }
+    // Group into category folders (Uncategorized shown last).
+    const groups = {};
+    filtered.forEach(p => { const c = (p.category||"").trim() || "Uncategorized"; (groups[c] = groups[c] || []).push(p); });
+    const cats = Object.keys(groups).sort((a,b) => {
+      if (a === "Uncategorized") return 1;
+      if (b === "Uncategorized") return -1;
+      return a.toLowerCase().localeCompare(b.toLowerCase());
+    });
+    partListEl.innerHTML = cats.map(cat => {
+      const items = groups[cat];
+      const totalQty = items.reduce((s,p) => s + (parseInt(p.quantity,10)||0), 0);
+      return `
+      <div class="cat-group">
+        <div class="cat-header">${escapeHtml(cat)}<span class="cat-count">${items.length} item${items.length===1?"":"s"} · ${totalQty} on hand</span></div>
+        ${items.map(partCardHtml).join("")}
       </div>`;
     }).join("");
     partListEl.querySelectorAll("[data-edit]").forEach(el => el.addEventListener("click", () => {
@@ -1811,6 +1876,161 @@
     partsCache.forEach(p => rows.push([p.name, p.category||"", parseInt(p.quantity,10)||0, parseInt(p.lowStock,10)||0, p.location||"", p.notes||""]));
     downloadCsv("shop-parts-inventory.csv", rows);
   });
+
+  // ==================================================
+  // SHOP — FLEET (trucks & equipment)
+  // Same delete model as parts (managers delete; mechanics request).
+  // ==================================================
+  let vehiclesCache = [];
+  let editingVehicleId = null;
+  let vehicleType = "truck";
+  const vehicleListEl = document.getElementById("vehicle-list");
+  const vehicleSheet = document.getElementById("vehicle-sheet");
+  const vehicleSheetBackdrop = document.getElementById("vehicle-sheet-backdrop");
+
+  function closeVehicleSheet(){ vehicleSheetBackdrop.classList.remove("show"); vehicleSheet.classList.remove("show"); }
+  document.getElementById("vehicle-sheet-close").addEventListener("click", closeVehicleSheet);
+  vehicleSheetBackdrop.addEventListener("click", closeVehicleSheet);
+  document.getElementById("btn-new-vehicle").addEventListener("click", () => { if (!isConfigured) return; openVehicleSheet(null); });
+
+  function setVehicleType(t){
+    vehicleType = t;
+    document.getElementById("vt-truck").classList.toggle("active", t === "truck");
+    document.getElementById("vt-equipment").classList.toggle("active", t === "equipment");
+    document.getElementById("v-truck-fields").style.display = t === "truck" ? "" : "none";
+    document.getElementById("v-equip-fields").style.display = t === "equipment" ? "" : "none";
+  }
+  document.querySelectorAll("[data-vtype]").forEach(btn => btn.addEventListener("click", () => setVehicleType(btn.dataset.vtype)));
+
+  function openVehicleSheet(v){
+    editingVehicleId = v ? v.id : null;
+    document.getElementById("vehicle-sheet-title").textContent = v ? "Edit Vehicle" : "Add Vehicle";
+    setVehicleType(v ? (v.type || "truck") : "truck");
+    document.getElementById("v-name").value = v ? (v.name||"") : "";
+    document.getElementById("v-vin").value = v ? (v.vinLast4||"") : "";
+    document.getElementById("v-year").value = v ? (v.year||"") : "";
+    document.getElementById("v-number").value = v ? (v.number||"") : "";
+    renderVehicleDeleteRow(v);
+    vehicleSheetBackdrop.classList.add("show");
+    vehicleSheet.classList.add("show");
+  }
+
+  function renderVehicleDeleteRow(v){
+    const row = document.getElementById("vehicle-delete-row");
+    if (!v){ row.innerHTML = ""; return; }
+    if (can.isManager()){
+      if (v.pendingDelete){
+        row.innerHTML = `<div class="hint" style="margin-bottom:8px; color:var(--warn);">Deletion requested by ${escapeHtml(v.pendingDeleteBy||"a mechanic")}.</div>
+          <button class="btn btn-danger btn-block" id="btn-approve-vdel">Approve deletion</button>
+          <button class="btn btn-ghost btn-block" id="btn-cancel-vdel" style="margin-top:8px;">Keep it (cancel request)</button>`;
+      } else {
+        row.innerHTML = `<button class="btn btn-danger btn-block" id="btn-del-vehicle">Delete Vehicle</button>`;
+      }
+    } else {
+      row.innerHTML = v.pendingDelete
+        ? `<div class="hint" style="color:var(--warn);">Deletion requested — awaiting a manager's approval.</div>`
+        : `<button class="btn btn-danger btn-block" id="btn-req-vdel">Request Deletion</button>`;
+    }
+    const approve = row.querySelector("#btn-approve-vdel");
+    if (approve) approve.addEventListener("click", () => deleteVehicle(v.id));
+    const del = row.querySelector("#btn-del-vehicle");
+    if (del) del.addEventListener("click", () => { if (confirm("Delete this vehicle? This can't be undone.")) deleteVehicle(v.id); });
+    const cancel = row.querySelector("#btn-cancel-vdel");
+    if (cancel) cancel.addEventListener("click", () => setVehiclePendingDelete(v.id, false));
+    const req = row.querySelector("#btn-req-vdel");
+    if (req) req.addEventListener("click", () => { if (confirm("Request that a manager delete this vehicle?")) setVehiclePendingDelete(v.id, true); });
+  }
+
+  document.getElementById("btn-save-vehicle").addEventListener("click", async () => {
+    const name = document.getElementById("v-name").value.trim();
+    if (!name){ document.getElementById("v-name").focus(); return; }
+    const btn = document.getElementById("btn-save-vehicle");
+    btn.disabled = true; btn.textContent = "Saving…";
+    const vId = editingVehicleId || uid("veh");
+    const existing = vehiclesCache.find(v => v.id === vId);
+    const isTruck = vehicleType === "truck";
+    const vehicle = {
+      id: vId,
+      type: vehicleType,
+      name,
+      vinLast4: isTruck ? document.getElementById("v-vin").value.trim() : "",
+      year: isTruck ? document.getElementById("v-year").value.trim() : "",
+      number: !isTruck ? document.getElementById("v-number").value.trim() : "",
+      pendingDelete: existing ? (existing.pendingDelete||false) : false,
+      pendingDeleteBy: existing ? (existing.pendingDeleteBy||"") : "",
+      createdAt: existing ? existing.createdAt : Date.now(),
+      updatedAt: Date.now(),
+      updatedByName: actorLabel()
+    };
+    try{
+      await db.collection("vehicles").doc(vId).set(vehicle);
+    }catch(err){
+      console.error(err);
+      btn.disabled = false; btn.textContent = "Save Vehicle";
+      alert("Couldn't save — check your connection and try again.");
+      return;
+    }
+    btn.disabled = false; btn.textContent = "Save Vehicle";
+    closeVehicleSheet();
+    loadVehicles();
+  });
+
+  async function deleteVehicle(vId){
+    try{ await db.collection("vehicles").doc(vId).delete(); }
+    catch(err){ console.error(err); alert("Couldn't delete — check your connection and try again."); return; }
+    closeVehicleSheet(); loadVehicles(); showToast("Vehicle deleted");
+  }
+  async function setVehiclePendingDelete(vId, flag){
+    try{ await db.collection("vehicles").doc(vId).update({ pendingDelete: flag, pendingDeleteBy: flag ? actorLabel() : "", updatedAt: Date.now() }); }
+    catch(err){ console.error(err); alert("Couldn't update — check your connection and try again."); return; }
+    closeVehicleSheet(); loadVehicles(); showToast(flag ? "Deletion requested — a manager will review it" : "Request cancelled");
+  }
+
+  async function loadVehicles(){
+    if (!isConfigured) return;
+    vehicleListEl.innerHTML = `<div class="loading-row"><div class="spinner"></div>Loading fleet…</div>`;
+    try{
+      const snap = await db.collection("vehicles").orderBy("name").get();
+      vehiclesCache = snap.docs.map(d => d.data());
+    }catch(err){
+      console.error(err);
+      vehicleListEl.innerHTML = `<div class="empty"><div class="icon">⚠</div><h3>Couldn't load fleet</h3><p>Check your connection and try again.</p></div>`;
+      return;
+    }
+    renderVehicleList();
+  }
+
+  function vehicleCardHtml(v){
+    const detail = v.type === "truck"
+      ? [v.year ? escapeHtml(String(v.year)) : "", v.vinLast4 ? "VIN ••" + escapeHtml(v.vinLast4) : ""].filter(Boolean).join(" · ")
+      : (v.number ? "# " + escapeHtml(v.number) : "");
+    return `
+      <div class="part-card" data-vedit="${v.id}" style="cursor:pointer;">
+        <div class="p-main">
+          <div class="p-name">${escapeHtml(v.name)}</div>
+          <div class="p-meta">
+            ${detail ? `<span>${detail}</span>` : ""}
+            ${v.pendingDelete ? `<span class="pill pending">Pending deletion</span>` : ""}
+          </div>
+        </div>
+      </div>`;
+  }
+
+  function renderVehicleList(){
+    if (vehiclesCache.length === 0){
+      vehicleListEl.innerHTML = `<div class="empty"><div class="icon">🚛</div><h3>No vehicles yet</h3><p>Tap “+ Add Vehicle” to add a truck or piece of equipment.</p></div>`;
+      return;
+    }
+    const trucks = vehiclesCache.filter(v => v.type === "truck");
+    const equip = vehiclesCache.filter(v => v.type !== "truck");
+    let html = "";
+    if (trucks.length) html += `<div class="cat-group"><div class="cat-header">🚛 Trucks<span class="cat-count">${trucks.length}</span></div>${trucks.map(vehicleCardHtml).join("")}</div>`;
+    if (equip.length) html += `<div class="cat-group"><div class="cat-header">🚜 Equipment<span class="cat-count">${equip.length}</span></div>${equip.map(vehicleCardHtml).join("")}</div>`;
+    vehicleListEl.innerHTML = html;
+    vehicleListEl.querySelectorAll("[data-vedit]").forEach(el => el.addEventListener("click", () => {
+      const v = vehiclesCache.find(x => x.id === el.dataset.vedit); if (v) openVehicleSheet(v);
+    }));
+  }
 
   // ---------------- Init ----------------
   // Data loads once a user signs in and their role resolves (see enterApp).
