@@ -19,16 +19,24 @@ service cloud.firestore {
     // The owner email is always a manager (bootstrap on first login).
     function isOwner()    { return signedIn() && request.auth.token.email == "soonersod@gmail.com"; }
     function isManager()  { return myRole() == "manager" || isOwner(); }
-    // Mechanics work jobs like technicians (plus the Shop, added later).
-    function canSeeJobs() { return myRole() == "manager" || myRole() == "technician" || myRole() == "mechanic"; }
-    function canSeeDrops(){ return myRole() == "manager" || myRole() == "semi"; }
+    // Mechanics and Drivers work jobs like technicians.
+    function canSeeJobs() { return myRole() == "manager" || myRole() == "technician" || myRole() == "mechanic" || myRole() == "driver"; }
+    // Drivers also handle Load Drops (like semi drivers).
+    function canSeeDrops(){ return myRole() == "manager" || myRole() == "semi" || myRole() == "driver"; }
     // Any assigned role — used for shared Places.
-    function hasAccess()  { return myRole() == "manager" || myRole() == "technician" || myRole() == "mechanic" || myRole() == "semi"; }
+    function hasAccess()  { return myRole() == "manager" || myRole() == "technician" || myRole() == "mechanic" || myRole() == "driver" || myRole() == "semi"; }
     // Shop = managers and mechanics.
     function canShop()    { return isManager() || myRole() == "mechanic"; }
+    // Move Grass = managers and drivers.
+    function canMoveGrass(){ return isManager() || myRole() == "driver"; }
     // A job's status ("open" if missing, for legacy docs).
     function statusOf(d)     { return ("status" in d) ? d.status : "open"; }
     function openOrMeasured(s){ return s == "open" || s == "measured"; }
+    // Only the grass-pickup fields changed (used when a driver confirms a move).
+    function onlyGrassFields(){
+      return request.resource.data.diff(resource.data).affectedKeys()
+        .hasOnly(["grassMoved","grassMovedByName","grassMovedAt","grassNotes","updatedAt"]);
+    }
 
     match /jobs/{jobId} {
       allow read:   if canSeeJobs();
@@ -36,10 +44,15 @@ service cloud.firestore {
       // Measured yards (no Upcoming/Completed).
       allow create: if canSeeJobs() && request.resource.data.size() <= 60
                     && (isManager() || openOrMeasured(statusOf(request.resource.data)));
-      // Managers can edit anything; the crew can edit Open/Measured items and
-      // move between those two (so they can't complete or schedule).
+      // Managers can edit anything. The crew can:
+      //  - edit Open/Measured items (and move between those two),
+      //  - Finish an Open job (open -> completed),
+      //  - and on a Completed job, only touch the grass-pickup fields.
       allow update: if canSeeJobs() && request.resource.data.size() <= 60
-                    && (isManager() || (openOrMeasured(statusOf(resource.data)) && openOrMeasured(statusOf(request.resource.data))));
+                    && (isManager()
+                        || (openOrMeasured(statusOf(resource.data)) && openOrMeasured(statusOf(request.resource.data)))
+                        || (statusOf(resource.data) == "open" && statusOf(request.resource.data) == "completed")
+                        || (statusOf(resource.data) == "completed" && statusOf(request.resource.data) == "completed" && onlyGrassFields()));
       // Managers delete anything; the crew may delete a Measured yard (scratch).
       allow delete: if isManager() || (canSeeJobs() && statusOf(resource.data) == "measured");
     }
