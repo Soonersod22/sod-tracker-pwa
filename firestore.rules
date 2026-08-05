@@ -26,19 +26,22 @@ service cloud.firestore {
     function hasAccess()  { return myRole() == "manager" || myRole() == "technician" || myRole() == "mechanic" || myRole() == "semi"; }
     // Shop = managers and mechanics.
     function canShop()    { return isManager() || myRole() == "mechanic"; }
-    // A job doc counts as "open" if its status is "open" or missing (legacy).
-    function docIsOpen(d) { return !("status" in d) || d.status == "open"; }
+    // A job's status ("open" if missing, for legacy docs).
+    function statusOf(d)     { return ("status" in d) ? d.status : "open"; }
+    function openOrMeasured(s){ return s == "open" || s == "measured"; }
 
     match /jobs/{jobId} {
       allow read:   if canSeeJobs();
-      // Managers can create any status; technicians can only create Open jobs.
+      // Managers can create any status; the crew can create Open jobs or
+      // Measured yards (no Upcoming/Completed).
       allow create: if canSeeJobs() && request.resource.data.size() <= 60
-                    && (isManager() || request.resource.data.status == "open");
-      // Managers can edit anything; technicians can only edit an Open job and
-      // must leave it Open (so they can't complete, reopen, or schedule).
+                    && (isManager() || openOrMeasured(statusOf(request.resource.data)));
+      // Managers can edit anything; the crew can edit Open/Measured items and
+      // move between those two (so they can't complete or schedule).
       allow update: if canSeeJobs() && request.resource.data.size() <= 60
-                    && (isManager() || (docIsOpen(resource.data) && request.resource.data.status == "open"));
-      allow delete: if isManager();
+                    && (isManager() || (openOrMeasured(statusOf(resource.data)) && openOrMeasured(statusOf(request.resource.data))));
+      // Managers delete anything; the crew may delete a Measured yard (scratch).
+      allow delete: if isManager() || (canSeeJobs() && statusOf(resource.data) == "measured");
     }
 
     match /drops/{dropId} {
