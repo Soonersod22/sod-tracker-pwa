@@ -26,6 +26,8 @@ service cloud.firestore {
     function hasAccess()  { return myRole() == "manager" || myRole() == "technician" || myRole() == "mechanic" || myRole() == "driver" || myRole() == "semi"; }
     // Shop = managers and mechanics.
     function canShop()    { return isManager() || myRole() == "mechanic"; }
+    // Grade = managers and graders.
+    function canGrade()   { return isManager() || myRole() == "grader"; }
     // Move Grass = managers and drivers.
     function canMoveGrass(){ return isManager() || myRole() == "driver"; }
     // A job's status ("open" if missing, for legacy docs).
@@ -90,6 +92,14 @@ service cloud.firestore {
     match /serviceRecords/{recordId} {
       allow read:           if canShop();
       allow create, update: if canShop() && request.resource.data.size() <= 40;
+      allow delete:         if isManager();
+    }
+
+    // Grade tasks — graders + managers view/create/edit; only managers
+    // "Verify & Clear" (delete).
+    match /gradeTasks/{taskId} {
+      allow read:           if canGrade();
+      allow create, update: if canGrade() && request.resource.data.size() <= 40;
       allow delete:         if isManager();
     }
 
