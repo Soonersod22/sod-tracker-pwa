@@ -679,6 +679,7 @@
     <div class="field"><label>Neighborhood *</label><input id="gr-hood" placeholder="e.g. Selah Meadows"></div>
     <div class="field"><label>Address</label><input id="gr-address" placeholder="123 Oak St (address and/or lot #)"></div>
     <div class="field"><label>Lot #</label><input id="gr-lot" placeholder="Optional"></div>
+    <div class="field"><label>Loads of topsoil</label><input id="gr-topsoil" type="number" inputmode="numeric" placeholder="Optional — # of loads for this lot"></div>
     <div class="field">
       <label>Verification Photos *</label>
       <div class="photo-grid" id="grade-photo-grid">
@@ -2685,6 +2686,7 @@
     document.getElementById("gr-hood").value = task ? (task.subdivision||"") : "";
     document.getElementById("gr-address").value = task ? (task.address||"") : "";
     document.getElementById("gr-lot").value = task ? (task.lot||"") : "";
+    document.getElementById("gr-topsoil").value = task ? (task.topsoilLoads != null && task.topsoilLoads !== 0 ? task.topsoilLoads : "") : "";
     gradePendingPhotos = task && task.photos ? task.photos.slice() : [];
     renderGradePhotoGrid();
     const row = document.getElementById("grade-verify-row");
@@ -2756,6 +2758,7 @@
       subdivision: hood,
       address: document.getElementById("gr-address").value.trim(),
       lot: document.getElementById("gr-lot").value.trim(),
+      topsoilLoads: parseInt(document.getElementById("gr-topsoil").value, 10) || 0,
       photos: photos,
       createdByName: existing ? (existing.createdByName||actorLabel()) : actorLabel(),
       createdAt: existing ? existing.createdAt : Date.now(),
@@ -2805,7 +2808,7 @@
           <div class="addr">${escapeHtml(t.address || (t.lot ? "Lot " + t.lot : "(no address)"))}</div>
           ${t.address && t.lot ? `<div class="lot">Lot ${escapeHtml(t.lot)}</div>` : ""}
         </div></div>
-        <div class="stats"><span class="pill photos">📷 ${(t.photos||[]).length}</span></div>
+        <div class="stats"><span class="pill photos">📷 ${(t.photos||[]).length}</span>${t.topsoilLoads ? ` <span class="pill soil">🚜 ${t.topsoilLoads} loads topsoil</span>` : ""}</div>
         <div class="date">${t.createdByName ? "By " + escapeHtml(t.createdByName) + " · " : ""}${new Date(t.createdAt).toLocaleDateString(undefined,{month:'short',day:'numeric',year:'numeric'})}</div>
       </div>`).join("");
     gradeListEl.querySelectorAll("[data-gtid]").forEach(card => card.addEventListener("click", () => {
