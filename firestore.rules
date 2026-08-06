@@ -81,6 +81,13 @@ service cloud.firestore {
       allow delete:         if isManager();
     }
 
+    // Parts folders (categories) — managers/mechanics manage them.
+    match /partFolders/{folderId} {
+      allow read:           if canShop();
+      allow create, update: if canShop() && request.resource.data.size() <= 10;
+      allow delete:         if canShop();
+    }
+
     // Fleet vehicles (trucks & equipment) — same access model as parts.
     match /vehicles/{vehicleId} {
       allow read:           if canShop();
