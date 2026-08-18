@@ -187,7 +187,7 @@
 
   .field{margin-bottom:16px;}
   .field label{display:block; font-size:13px; font-weight:650; color:var(--ink-soft); margin-bottom:6px;}
-  .field input, .field textarea{
+  .field input, .field textarea, .field select{
     width:100%; padding:12px 13px; border-radius:10px; border:1.5px solid var(--line);
     font-size:16px; font-family:inherit; background:var(--card); color:var(--ink);
   }
@@ -295,6 +295,44 @@
   .role-chip{font-size:11px; font-weight:700; padding:3px 9px; border-radius:20px; background:var(--turf-light); color:var(--turf); text-transform:capitalize; white-space:nowrap;}
   .signout-btn{border:1px solid var(--line); background:var(--card); color:var(--ink-soft); border-radius:8px; padding:5px 10px; font-size:12px; font-weight:650; cursor:pointer; font-family:inherit;}
   .hidden-by-role{display:none !important;}
+
+  /* ---------- Maintenance request (standalone header button) ---------- */
+  .maint-bar{display:flex; margin:0 0 10px 0;}
+  .maint-btn{
+    display:inline-flex; align-items:center; gap:7px; margin-left:auto;
+    border:1.5px solid var(--warn-light); background:var(--warn-light); color:var(--warn);
+    border-radius:10px; padding:8px 13px; font-size:13px; font-weight:750;
+    cursor:pointer; font-family:inherit; white-space:nowrap;
+  }
+  .maint-btn:active{background:#EFD3C2;}
+  /* Urgency picker inside the request form */
+  .urg-row{display:flex; gap:6px;}
+  .urg-btn{
+    flex:1; border:1.5px solid var(--line); background:var(--card); color:var(--ink-soft);
+    border-radius:10px; padding:10px 6px; font-size:12.5px; font-weight:700;
+    cursor:pointer; font-family:inherit; line-height:1.25;
+  }
+  .urg-btn.active[data-urg="low"]{background:var(--turf); color:#fff; border-color:var(--turf);}
+  .urg-btn.active[data-urg="med"]{background:var(--soil); color:#fff; border-color:var(--soil);}
+  .urg-btn.active[data-urg="down"]{background:var(--warn); color:#fff; border-color:var(--warn);}
+  /* Request pills / card accents */
+  .pill.urg-low{background:var(--turf-light); color:var(--turf);}
+  .pill.urg-med{background:#F1E7DA; color:var(--soil);}
+  .pill.urg-down{background:var(--warn); color:#fff;}
+  .pill.status-new{background:var(--hauler); color:#fff;}
+  .pill.status-progress{background:var(--hauler-light); color:var(--hauler);}
+  .job-card.req-down{border-left:4px solid var(--warn);}
+  .job-card .symptoms{
+    margin-top:9px; font-size:13.5px; line-height:1.45; color:var(--ink-soft);
+    white-space:pre-wrap; word-break:break-word;
+  }
+  .tab-badge{
+    background:var(--warn); color:#fff; font-size:10.5px; font-weight:800;
+    border-radius:20px; padding:1px 6px; min-width:17px; text-align:center;
+  }
+  .maint-detail{font-size:14px; line-height:1.55; margin-bottom:14px;}
+  .maint-detail .k{color:var(--ink-soft); font-size:12px; font-weight:700; text-transform:uppercase; letter-spacing:.04em;}
+  .maint-detail .v{font-weight:650; margin-bottom:9px; white-space:pre-wrap; word-break:break-word;}
   .crew-row{display:flex; align-items:center; justify-content:space-between; gap:12px; padding:12px 0; border-bottom:1px solid var(--line);}
   .crew-row .who{min-width:0;}
   .crew-row .email{font-size:14px; font-weight:600; word-break:break-all;}
@@ -405,7 +443,10 @@
       <button class="tab-btn" data-tab="places" id="tab-places"><span class="dot"></span>Pins</button>
       <button class="tab-btn" data-tab="movegrass" id="tab-movegrass"><span class="dot"></span>Move Grass</button>
       <button class="tab-btn" data-tab="grade" id="tab-grade"><span class="dot"></span>Grade</button>
-      <button class="tab-btn" data-tab="shop" id="tab-shop"><span class="dot"></span>Shop</button>
+      <button class="tab-btn" data-tab="shop" id="tab-shop"><span class="dot"></span>Shop<span class="tab-badge hidden-by-role" id="shop-tab-badge"></span></button>
+    </div>
+    <div class="maint-bar" id="maint-bar" style="display:none;">
+      <button class="maint-btn" id="btn-maint-request">🔧 Maintenance Request</button>
     </div>
   </header>
 
@@ -466,6 +507,7 @@
       <div class="subtabs">
         <button class="subtab-btn active" data-shopview="parts" id="shoptab-parts">🧰 Parts</button>
         <button class="subtab-btn" data-shopview="fleet" id="shoptab-fleet">🚛 Fleet</button>
+        <button class="subtab-btn" data-shopview="requests" id="shoptab-requests">🔧 Requests</button>
       </div>
       <div id="shop-parts" class="shop-view">
         <div class="fab-row">
@@ -484,6 +526,17 @@
           <button class="btn btn-primary btn-block" id="btn-new-vehicle">+ Add Vehicle</button>
         </div>
         <div id="vehicle-list"></div>
+      </div>
+      <div id="shop-requests" class="shop-view" style="display:none;">
+        <div class="subtabs" id="req-filter-tabs">
+          <button class="subtab-btn active" data-reqfilter="open" id="reqtab-open">Open</button>
+          <button class="subtab-btn" data-reqfilter="done" id="reqtab-done">Done</button>
+        </div>
+        <div class="search-wrap">
+          <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="11" cy="11" r="7"/><line x1="21" y1="21" x2="16.65" y2="16.65"/></svg>
+          <input id="req-search" placeholder="Search by machine, unit #, VIN, or symptoms">
+        </div>
+        <div id="request-list"></div>
       </div>
     </section>
 
@@ -694,6 +747,62 @@
   </div>
 </div>
 
+<div class="sheet-backdrop" id="maint-sheet-backdrop"></div>
+<div class="sheet" id="maint-sheet">
+  <div class="sheet-header"><h2 id="maint-sheet-title">Maintenance Request</h2><button class="close-x" id="maint-sheet-close">✕</button></div>
+  <div class="sheet-body">
+    <div class="field">
+      <label>What kind of machine? *</label>
+      <div class="subtabs">
+        <button type="button" class="subtab-btn active" data-mtype="truck" id="mt-truck">🚛 Truck</button>
+        <button type="button" class="subtab-btn" data-mtype="equipment" id="mt-equipment">🚜 Equipment</button>
+        <button type="button" class="subtab-btn" data-mtype="other" id="mt-other">🔩 Other</button>
+      </div>
+    </div>
+
+    <div class="field">
+      <label>Pick it from the fleet list</label>
+      <select id="mr-vehicle"></select>
+      <div class="hint">Not on the list? Choose “Not listed — I'll type it in” and fill in the boxes below.</div>
+    </div>
+
+    <div class="field"><label>Machine / truck name *</label><input id="mr-name" placeholder="e.g. Truck 12, Bobcat S650, Kubota mower"></div>
+    <div class="field-row">
+      <div class="field"><label>Year</label><input id="mr-year" type="number" inputmode="numeric" placeholder="2020"></div>
+      <div class="field"><label>Unit #</label><input id="mr-unit" placeholder="e.g. 12 or EQ-7"></div>
+    </div>
+    <div class="field"><label>Last 4 of VIN / serial #</label><input id="mr-vin" maxlength="8" placeholder="e.g. 4821 (optional)"></div>
+    <div class="field"><label>Meter reading (miles / hours)</label><input id="mr-meter" type="number" inputmode="numeric" placeholder="Optional"></div>
+
+    <div class="field">
+      <label>How bad is it? *</label>
+      <div class="urg-row">
+        <button type="button" class="urg-btn" data-urg="low" id="urg-low">Can wait</button>
+        <button type="button" class="urg-btn active" data-urg="med" id="urg-med">Needs attention</button>
+        <button type="button" class="urg-btn" data-urg="down" id="urg-down">DOWN<br>can't run</button>
+      </div>
+    </div>
+
+    <div class="field">
+      <label>What's wrong? *</label>
+      <textarea id="mr-symptoms" rows="8" style="min-height:150px;" placeholder="Describe everything you can — what it does, when it started, what noises/smells/warning lights, what you already tried. The more detail, the faster the shop can fix it."></textarea>
+      <div class="hint">Take your time here — this is what the mechanic reads first.</div>
+    </div>
+
+    <div class="field"><label>Where is the machine right now?</label><input id="mr-location" placeholder="e.g. Selah Meadows jobsite, back lot, shop (optional)"></div>
+    <div class="field"><label>Best number to reach you</label><input id="mr-phone" type="tel" inputmode="tel" placeholder="Optional"></div>
+
+    <button class="btn btn-primary btn-block" id="btn-save-maint">Submit Request</button>
+    <div id="maint-cancel-row" style="margin-top:12px;"></div>
+  </div>
+</div>
+
+<div class="sheet-backdrop" id="req-detail-backdrop"></div>
+<div class="sheet" id="req-detail-sheet">
+  <div class="sheet-header"><h2 id="req-detail-title">Maintenance Request</h2><button class="close-x" id="req-detail-close">✕</button></div>
+  <div class="sheet-body" id="req-detail-body"></div>
+</div>
+
 <div class="sheet-backdrop" id="grade-sheet-backdrop"></div>
 <div class="sheet" id="grade-sheet">
   <div class="sheet-header"><h2 id="grade-sheet-title">New Grade Task</h2><button class="close-x" id="grade-sheet-close">✕</button></div>
@@ -788,6 +897,8 @@
     moveGrass:  () => currentRole === "manager" || currentRole === "driver",
     grade:      () => currentRole === "manager" || currentRole === "grader",
     usePins:    () => currentRole !== "grader",  // everyone except graders sees Pins
+    // Maintenance requests: Technicians, Drivers, Mechanics and Managers.
+    requestMaint: () => ["manager","technician","mechanic","driver"].indexOf(currentRole) >= 0,
     isMechanic: () => currentRole === "mechanic",
     isManager:  () => currentRole === "manager"
   };
@@ -927,7 +1038,9 @@
     if (can.manageJobs()) loadJobs();
     if (can.manageDrops()) loadDrops();
     loadPins(); // available to every signed-in role
-    if (can.useShop()){ loadParts(); loadVehicles(); loadServices(); }
+    if (can.useShop()){ loadParts(); loadVehicles(); loadServices(); loadMaintRequests(); }
+    // Non-shop crew still need the fleet list to pick a machine on a request.
+    else if (can.requestMaint()) loadVehicles();
     if (can.grade()) loadGradeTasks();
   }
 
@@ -1047,6 +1160,7 @@
       document.querySelectorAll("[data-shopview]").forEach(b => b.classList.toggle("active", b === btn));
       document.getElementById("shop-parts").style.display = view === "parts" ? "" : "none";
       document.getElementById("shop-fleet").style.display = view === "fleet" ? "" : "none";
+      document.getElementById("shop-requests").style.display = view === "requests" ? "" : "none";
     });
   });
 
@@ -1070,6 +1184,8 @@
     // Pins is for everyone except Graders (who are locked to Grade only).
     document.getElementById("tab-places").classList.toggle("hidden-by-role", !can.usePins());
     document.getElementById("job-tabs").style.display = "";
+    // The standalone Maintenance Request button — Techs, Drivers, Mechanics, Managers.
+    document.getElementById("maint-bar").style.display = can.requestMaint() ? "flex" : "none";
 
     // Only managers get Upcoming / Completed sub-tabs and the exports.
     // Measured is available to the whole crew (they do the measuring).
@@ -2968,6 +3084,307 @@
     gradeListEl.querySelectorAll("[data-gtid]").forEach(card => card.addEventListener("click", () => {
       const t = gradeCache.find(x => x.id === card.dataset.gtid); if (t) openGradeSheet(t);
     }));
+  }
+
+  // ==================================================
+  // MAINTENANCE REQUESTS
+  // Anyone who works the jobs (Technicians, Drivers, Mechanics, Managers)
+  // can submit one from the header button. They land in the Shop tab under
+  // "Requests" as a task list. Mechanics + Managers work and close them.
+  // Lifecycle: "new" -> "progress" -> "done".
+  // ==================================================
+  let maintCache = [];
+  let currentReqFilter = "open";
+  let maintType = "truck";
+  let maintUrgency = "med";
+  let editingReqId = null;          // set when a submitter edits their own pending request
+  const requestListEl = document.getElementById("request-list");
+  const maintSheet = document.getElementById("maint-sheet");
+  const maintBackdrop = document.getElementById("maint-sheet-backdrop");
+  const reqDetailSheet = document.getElementById("req-detail-sheet");
+  const reqDetailBackdrop = document.getElementById("req-detail-backdrop");
+
+  const URG_LABEL   = { low: "Can wait", med: "Needs attention", down: "DOWN — can't run" };
+  const URG_CLASS   = { low: "urg-low", med: "urg-med", down: "urg-down" };
+  const URG_RANK    = { down: 0, med: 1, low: 2 };
+  const MTYPE_LABEL = { truck: "🚛 Truck", equipment: "🚜 Equipment", other: "🔩 Other" };
+  const REQ_STATUS_LABEL = { new: "New", progress: "In Progress", done: "Done" };
+
+  function closeMaintSheet(){ maintBackdrop.classList.remove("show"); maintSheet.classList.remove("show"); }
+  document.getElementById("maint-sheet-close").addEventListener("click", closeMaintSheet);
+  maintBackdrop.addEventListener("click", closeMaintSheet);
+  function closeReqDetail(){ reqDetailBackdrop.classList.remove("show"); reqDetailSheet.classList.remove("show"); }
+  document.getElementById("req-detail-close").addEventListener("click", closeReqDetail);
+  reqDetailBackdrop.addEventListener("click", closeReqDetail);
+
+  document.getElementById("btn-maint-request").addEventListener("click", () => {
+    if (!isConfigured) return;
+    openMaintSheet(null);
+  });
+
+  function setMaintType(t){
+    maintType = t;
+    document.getElementById("mt-truck").classList.toggle("active", t === "truck");
+    document.getElementById("mt-equipment").classList.toggle("active", t === "equipment");
+    document.getElementById("mt-other").classList.toggle("active", t === "other");
+    populateMaintVehiclePicker();
+  }
+  document.querySelectorAll("[data-mtype]").forEach(btn => btn.addEventListener("click", () => {
+    if (btn.dataset.mtype === maintType) return;
+    // Switching type means a different machine — clear the ID boxes so no
+    // details from the last pick get left behind.
+    ["mr-name","mr-year","mr-unit","mr-vin"].forEach(id => { document.getElementById(id).value = ""; });
+    setMaintType(btn.dataset.mtype);
+  }));
+
+  function setMaintUrgency(u){
+    maintUrgency = u;
+    document.querySelectorAll("[data-urg]").forEach(b => b.classList.toggle("active", b.dataset.urg === u));
+  }
+  document.querySelectorAll("[data-urg]").forEach(btn => btn.addEventListener("click", () => setMaintUrgency(btn.dataset.urg)));
+
+  // The picker lists vehicles of the chosen type, plus a manual-entry option.
+  function populateMaintVehiclePicker(keepId){
+    const sel = document.getElementById("mr-vehicle");
+    const wanted = keepId != null ? keepId : sel.value;
+    const matches = maintType === "other" ? [] : vehiclesCache.filter(v => (v.type === "truck") === (maintType === "truck"));
+    sel.innerHTML = `<option value="">Not listed — I'll type it in</option>` +
+      matches.map(v => `<option value="${escapeHtml(v.id)}">${escapeHtml(v.name)}</option>`).join("");
+    sel.parentElement.style.display = matches.length ? "" : "none";
+    if (wanted && matches.some(v => v.id === wanted)) sel.value = wanted;
+  }
+
+  document.getElementById("mr-vehicle").addEventListener("change", () => {
+    const v = vehiclesCache.find(x => x.id === document.getElementById("mr-vehicle").value);
+    if (!v) return;
+    document.getElementById("mr-name").value = v.name || "";
+    document.getElementById("mr-year").value = v.year || "";
+    document.getElementById("mr-unit").value = v.number || "";
+    document.getElementById("mr-vin").value  = v.vinLast4 || "";
+  });
+
+  function openMaintSheet(req){
+    editingReqId = req ? req.id : null;
+    document.getElementById("maint-sheet-title").textContent = req ? "Edit Request" : "Maintenance Request";
+    setMaintType(req ? (req.machineType || "truck") : "truck");
+    setMaintUrgency(req ? (req.urgency || "med") : "med");
+    populateMaintVehiclePicker(req ? (req.vehicleId || "") : "");
+    document.getElementById("mr-vehicle").value = req ? (req.vehicleId || "") : "";
+    document.getElementById("mr-name").value     = req ? (req.machineName || "") : "";
+    document.getElementById("mr-year").value     = req ? (req.year || "") : "";
+    document.getElementById("mr-unit").value     = req ? (req.unitNumber || "") : "";
+    document.getElementById("mr-vin").value      = req ? (req.vinLast4 || "") : "";
+    document.getElementById("mr-meter").value    = req ? (req.meter || "") : "";
+    document.getElementById("mr-symptoms").value = req ? (req.symptoms || "") : "";
+    document.getElementById("mr-location").value = req ? (req.location || "") : "";
+    document.getElementById("mr-phone").value    = req ? (req.phone || "") : "";
+    document.getElementById("btn-save-maint").textContent = req ? "Save Changes" : "Submit Request";
+    document.getElementById("maint-cancel-row").innerHTML = "";
+    maintBackdrop.classList.add("show");
+    maintSheet.classList.add("show");
+  }
+
+  document.getElementById("btn-save-maint").addEventListener("click", async () => {
+    const name = document.getElementById("mr-name").value.trim();
+    const symptoms = document.getElementById("mr-symptoms").value.trim();
+    if (!name){ document.getElementById("mr-name").focus(); alert("Please name the machine or truck so the shop knows what to look at."); return; }
+    if (!symptoms){ document.getElementById("mr-symptoms").focus(); alert("Please describe what's wrong."); return; }
+
+    const btn = document.getElementById("btn-save-maint");
+    const originalText = btn.textContent;
+    btn.disabled = true; btn.textContent = "Sending…";
+
+    const reqId = editingReqId || uid("mreq");
+    const existing = maintCache.find(r => r.id === reqId);
+    const req = {
+      id: reqId,
+      machineType: maintType,
+      vehicleId: document.getElementById("mr-vehicle").value || "",
+      machineName: name,
+      year: document.getElementById("mr-year").value.trim(),
+      unitNumber: document.getElementById("mr-unit").value.trim(),
+      vinLast4: document.getElementById("mr-vin").value.trim(),
+      meter: document.getElementById("mr-meter").value.trim(),
+      urgency: maintUrgency,
+      symptoms: symptoms,
+      location: document.getElementById("mr-location").value.trim(),
+      phone: document.getElementById("mr-phone").value.trim(),
+      status: existing ? (existing.status || "new") : "new",
+      shopNotes: existing ? (existing.shopNotes || "") : "",
+      requestedByName: existing ? (existing.requestedByName || actorLabel()) : actorLabel(),
+      requestedByEmail: existing ? (existing.requestedByEmail || "") : ((currentUser && currentUser.email) || ""),
+      createdAt: existing ? existing.createdAt : Date.now(),
+      updatedAt: Date.now(),
+      updatedByName: actorLabel()
+    };
+    try{
+      await db.collection("maintenanceRequests").doc(reqId).set(req);
+    }catch(err){
+      console.error(err);
+      btn.disabled = false; btn.textContent = originalText;
+      alert("Couldn't send the request — check your connection and try again.");
+      return;
+    }
+    btn.disabled = false; btn.textContent = originalText;
+    closeMaintSheet();
+    showToast(editingReqId ? "Request updated" : "Request sent to the shop ✓");
+    if (can.useShop()) loadMaintRequests();
+  });
+
+  async function loadMaintRequests(){
+    if (!isConfigured || !can.useShop()) return;
+    requestListEl.innerHTML = `<div class="loading-row"><div class="spinner"></div>Loading requests…</div>`;
+    try{
+      const snap = await db.collection("maintenanceRequests").orderBy("createdAt","desc").get();
+      maintCache = snap.docs.map(d => d.data());
+    }catch(err){
+      console.error(err);
+      requestListEl.innerHTML = `<div class="empty"><div class="icon">⚠</div><h3>Couldn't load requests</h3><p>Check your connection and try again.</p></div>`;
+      return;
+    }
+    renderRequestList();
+    updateRequestCounts();
+  }
+
+  function updateRequestCounts(){
+    const open = maintCache.filter(r => r.status !== "done");
+    const down = open.filter(r => r.urgency === "down").length;
+    document.getElementById("reqtab-open").textContent  = "Open" + (open.length ? " (" + open.length + ")" : "");
+    document.getElementById("reqtab-done").textContent  = "Done";
+    document.getElementById("shoptab-requests").textContent = "🔧 Requests" + (open.length ? " (" + open.length + ")" : "");
+    // A badge on the Shop tab itself so a down machine is impossible to miss.
+    const badge = document.getElementById("shop-tab-badge");
+    badge.textContent = open.length ? String(open.length) : "";
+    badge.classList.toggle("hidden-by-role", !open.length);
+    badge.style.background = down ? "var(--warn)" : "var(--hauler)";
+  }
+
+  document.querySelectorAll("[data-reqfilter]").forEach(btn => btn.addEventListener("click", () => {
+    currentReqFilter = btn.dataset.reqfilter;
+    document.querySelectorAll("[data-reqfilter]").forEach(b => b.classList.toggle("active", b === btn));
+    renderRequestList();
+  }));
+  document.getElementById("req-search").addEventListener("input", renderRequestList);
+
+  function reqIdLine(r){
+    return [r.year, r.unitNumber ? "Unit " + r.unitNumber : "", r.vinLast4 ? "VIN ••" + r.vinLast4 : "", r.meter ? r.meter + " mi/hrs" : ""]
+      .filter(Boolean).map(escapeHtml).join(" · ");
+  }
+
+  function renderRequestList(){
+    if (!requestListEl) return;
+    const q = (document.getElementById("req-search").value || "").toLowerCase().trim();
+    let list = maintCache.filter(r => currentReqFilter === "done" ? r.status === "done" : r.status !== "done");
+    if (q){
+      list = list.filter(r =>
+        (r.machineName||"").toLowerCase().includes(q) ||
+        (r.unitNumber||"").toLowerCase().includes(q) ||
+        (r.vinLast4||"").toLowerCase().includes(q) ||
+        (r.symptoms||"").toLowerCase().includes(q) ||
+        (r.requestedByName||"").toLowerCase().includes(q));
+    }
+    // Worst first: down machines on top, then by newest.
+    list.sort((a,b) => (URG_RANK[a.urgency]||1) - (URG_RANK[b.urgency]||1) || (b.createdAt||0) - (a.createdAt||0));
+
+    if (list.length === 0){
+      const noneYet = maintCache.filter(r => currentReqFilter === "done" ? r.status === "done" : r.status !== "done").length === 0;
+      requestListEl.innerHTML = `<div class="empty"><div class="icon">🔧</div><h3>${noneYet ? (currentReqFilter === "done" ? "Nothing closed out yet" : "No open requests") : "No matches"}</h3><p>${noneYet ? (currentReqFilter === "done" ? "Finished requests land here." : "The crew hasn't reported any problems. 🎉") : "Try a different search."}</p></div>`;
+      return;
+    }
+
+    requestListEl.innerHTML = list.map(r => {
+      const idLine = reqIdLine(r);
+      const short = (r.symptoms||"").length > 180 ? (r.symptoms||"").slice(0,180) + "…" : (r.symptoms||"");
+      return `
+      <div class="job-card ${r.urgency === "down" && r.status !== "done" ? "req-down" : ""} ${r.status === "done" ? "completed" : ""}" data-reqid="${r.id}">
+        <div class="row1"><div>
+          <div class="subdiv">${MTYPE_LABEL[r.machineType] || "Machine"}</div>
+          <div class="addr">${escapeHtml(r.machineName || "(unnamed machine)")}</div>
+          ${idLine ? `<div class="lot">${idLine}</div>` : ""}
+        </div></div>
+        <div class="stats">
+          <span class="pill ${URG_CLASS[r.urgency] || "urg-med"}">${escapeHtml(URG_LABEL[r.urgency] || "Needs attention")}</span>
+          ${r.status === "progress" ? `<span class="pill status-progress">In Progress</span>` : ""}
+          ${r.status === "new" ? `<span class="pill status-new">New</span>` : ""}
+          ${r.status === "done" ? `<span class="pill done">✓ Done</span>` : ""}
+          ${r.location ? `<span class="pill photos">📍 ${escapeHtml(r.location)}</span>` : ""}
+        </div>
+        ${short ? `<div class="symptoms">${escapeHtml(short)}</div>` : ""}
+        <div class="date">Reported by ${escapeHtml(r.requestedByName || "someone")} · ${new Date(r.createdAt).toLocaleDateString(undefined,{month:'short',day:'numeric'})} ${new Date(r.createdAt).toLocaleTimeString(undefined,{hour:'numeric',minute:'2-digit'})}</div>
+      </div>`;
+    }).join("");
+
+    requestListEl.querySelectorAll("[data-reqid]").forEach(card => card.addEventListener("click", () => {
+      const r = maintCache.find(x => x.id === card.dataset.reqid);
+      if (r) openReqDetail(r);
+    }));
+  }
+
+  function openReqDetail(r){
+    document.getElementById("req-detail-title").textContent = r.machineName || "Maintenance Request";
+    const rows = [
+      ["Machine type", MTYPE_LABEL[r.machineType] || "—"],
+      ["Machine / truck", r.machineName || "—"],
+      ["Year", r.year || "—"],
+      ["Unit #", r.unitNumber || "—"],
+      ["Last 4 VIN / serial", r.vinLast4 || "—"],
+      ["Meter", r.meter || "—"],
+      ["Urgency", URG_LABEL[r.urgency] || "—"],
+      ["Symptoms", r.symptoms || "—"],
+      ["Where it is", r.location || "—"],
+      ["Reported by", (r.requestedByName || "someone") + (r.phone ? " · " + r.phone : "")],
+      ["Reported", new Date(r.createdAt).toLocaleString()]
+    ];
+    let html = `<div class="maint-detail">` + rows.map(([k,v]) =>
+      `<div class="k">${escapeHtml(k)}</div><div class="v">${escapeHtml(String(v))}</div>`).join("") + `</div>`;
+
+    html += `<div class="field"><label>Shop notes (what you found / what you did)</label>
+      <textarea id="req-shop-notes" rows="4" placeholder="Optional — visible to the shop and managers">${escapeHtml(r.shopNotes||"")}</textarea></div>`;
+
+    if (r.status !== "done"){
+      html += r.status === "new"
+        ? `<button class="btn btn-hauler btn-block" id="btn-req-start" style="margin-bottom:8px;">🔧 Start Work</button>`
+        : `<div class="hint" style="margin-bottom:8px;">In progress${r.startedByName ? " — " + escapeHtml(r.startedByName) : ""}.</div>`;
+      html += `<button class="btn btn-primary btn-block" id="btn-req-done">✓ Mark Done</button>`;
+    } else {
+      html += `<div class="hint" style="margin-bottom:8px;">Closed out${r.doneByName ? " by " + escapeHtml(r.doneByName) : ""}${r.doneAt ? " on " + new Date(r.doneAt).toLocaleDateString() : ""}.</div>`;
+      html += `<button class="btn btn-ghost btn-block" id="btn-req-reopen">Reopen This Request</button>`;
+    }
+    html += `<button class="btn btn-ghost btn-block" id="btn-req-savenotes" style="margin-top:8px;">Save Notes</button>`;
+    if (can.isManager()){
+      html += `<button class="btn btn-danger btn-block" id="btn-req-delete" style="margin-top:12px;">Delete Request</button>`;
+    }
+
+    const body = document.getElementById("req-detail-body");
+    body.innerHTML = html;
+    const notes = () => (document.getElementById("req-shop-notes").value || "").trim();
+
+    const start = body.querySelector("#btn-req-start");
+    if (start) start.addEventListener("click", () => updateRequest(r.id, { status: "progress", startedAt: Date.now(), startedByName: actorLabel(), shopNotes: notes() }, "Marked in progress"));
+    const done = body.querySelector("#btn-req-done");
+    if (done) done.addEventListener("click", () => updateRequest(r.id, { status: "done", doneAt: Date.now(), doneByName: actorLabel(), shopNotes: notes() }, "Request closed out ✓"));
+    const reopen = body.querySelector("#btn-req-reopen");
+    if (reopen) reopen.addEventListener("click", () => updateRequest(r.id, { status: "progress", doneAt: 0, doneByName: "", shopNotes: notes() }, "Reopened"));
+    const saveNotes = body.querySelector("#btn-req-savenotes");
+    if (saveNotes) saveNotes.addEventListener("click", () => updateRequest(r.id, { shopNotes: notes() }, "Notes saved"));
+    const del = body.querySelector("#btn-req-delete");
+    if (del) del.addEventListener("click", async () => {
+      if (!confirm("Delete this maintenance request? This can't be undone.")) return;
+      try{ await db.collection("maintenanceRequests").doc(r.id).delete(); }
+      catch(err){ console.error(err); alert("Couldn't delete — check your connection and try again."); return; }
+      closeReqDetail(); loadMaintRequests(); showToast("Request deleted");
+    });
+
+    reqDetailBackdrop.classList.add("show");
+    reqDetailSheet.classList.add("show");
+  }
+
+  async function updateRequest(reqId, changes, toast){
+    changes.updatedAt = Date.now();
+    changes.updatedByName = actorLabel();
+    try{ await db.collection("maintenanceRequests").doc(reqId).update(changes); }
+    catch(err){ console.error(err); alert("Couldn't update — check your connection and try again."); return; }
+    closeReqDetail(); await loadMaintRequests(); showToast(toast);
   }
 
   // ---------------- Init ----------------
