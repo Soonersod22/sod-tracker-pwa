@@ -297,14 +297,26 @@
   .hidden-by-role{display:none !important;}
 
   /* ---------- Maintenance request (standalone header button) ---------- */
-  .maint-bar{display:flex; margin:0 0 10px 0;}
+  .maint-bar{display:flex; justify-content:flex-end; flex-wrap:wrap; gap:8px; margin:0 0 10px 0;}
   .maint-btn{
-    display:inline-flex; align-items:center; gap:7px; margin-left:auto;
+    display:inline-flex; align-items:center; gap:7px;
     border:1.5px solid var(--warn-light); background:var(--warn-light); color:var(--warn);
     border-radius:10px; padding:8px 13px; font-size:13px; font-weight:750;
     cursor:pointer; font-family:inherit; white-space:nowrap;
   }
   .maint-btn:active{background:#EFD3C2;}
+  /* "Add New Moved Sod" — same small shape, turf green. Move Grass tab only. */
+  .maint-btn.grass-add-btn{border-color:var(--turf); background:var(--turf); color:#fff;}
+  .maint-btn.grass-add-btn:active{background:#25401F;}
+  /* "Billed" — managers only. Office blue, and it stays lit while you're on it. */
+  .maint-btn.billed-btn{border-color:var(--hauler-light); background:var(--hauler-light); color:var(--hauler);}
+  .maint-btn.billed-btn:active{background:#CBD9E4;}
+  .maint-btn.billed-btn.on{background:var(--hauler); border-color:var(--hauler); color:#fff;}
+  .invoice-pill{
+    font-family:ui-monospace, "SF Mono", Menlo, monospace;
+    font-size:12.5px; font-weight:700; letter-spacing:.02em;
+    background:var(--hauler); color:#fff; border-radius:6px; padding:3px 9px;
+  }
   /* Urgency picker inside the request form */
   .urg-row{display:flex; gap:6px;}
   .urg-btn{
@@ -446,6 +458,8 @@
       <button class="tab-btn" data-tab="shop" id="tab-shop"><span class="dot"></span>Shop<span class="tab-badge hidden-by-role" id="shop-tab-badge"></span></button>
     </div>
     <div class="maint-bar" id="maint-bar" style="display:none;">
+      <button class="maint-btn grass-add-btn" id="btn-add-moved-sod" style="display:none;">🌱 Add New Moved Sod</button>
+      <button class="maint-btn billed-btn" id="btn-billed-tab" style="display:none;">🧾 Billed</button>
       <button class="maint-btn" id="btn-maint-request">🔧 Maintenance Request</button>
     </div>
   </header>
@@ -540,9 +554,22 @@
       </div>
     </section>
 
+    <section id="view-billed" class="view">
+      <div class="fab-row">
+        <button class="btn btn-ghost" id="btn-billed-back">← Back to Jobs</button>
+        <button class="btn btn-ghost" id="btn-export-billed" title="Export to CSV">⬇ CSV</button>
+      </div>
+      <div class="search-wrap">
+        <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="11" cy="11" r="7"/><line x1="21" y1="21" x2="16.65" y2="16.65"/></svg>
+        <input id="billed-search" placeholder="Search by invoice #, address, subdivision, or lot #">
+      </div>
+      <div id="billed-list"></div>
+    </section>
+
     <section id="view-movegrass" class="view">
       <div id="grass-tally"></div>
       <div id="grass-list"></div>
+      <div id="grass-moved-log"></div>
     </section>
 
     <section id="view-grade" class="view">
@@ -744,6 +771,41 @@
       </div>
     </div>
     <button class="btn btn-primary btn-block" id="btn-finish-complete" disabled>Complete Job</button>
+  </div>
+</div>
+
+<div class="sheet-backdrop" id="invoice-sheet-backdrop"></div>
+<div class="sheet" id="invoice-sheet">
+  <div class="sheet-header"><h2>Mark as Billed</h2><button class="close-x" id="invoice-sheet-close">✕</button></div>
+  <div class="sheet-body">
+    <div id="invoice-job-line" class="hint" style="margin-bottom:14px;"></div>
+    <div id="invoice-grass-warning" style="display:none;"></div>
+    <div class="field">
+      <label>Invoice number *</label>
+      <input id="inv-number" placeholder="e.g. 10482" autocomplete="off">
+    </div>
+    <div class="field"><label>Date billed</label><input id="inv-date" type="date"></div>
+    <button class="btn btn-primary btn-block" id="btn-save-invoice">Mark as Billed</button>
+    <div class="hint" style="margin-top:10px;">This moves the job off the Completed tab and onto the Billed screen. It stays there until you delete it by hand.</div>
+  </div>
+</div>
+
+<div class="sheet-backdrop" id="movedsod-sheet-backdrop"></div>
+<div class="sheet" id="movedsod-sheet">
+  <div class="sheet-header"><h2>Add New Moved Sod</h2><button class="close-x" id="movedsod-sheet-close">✕</button></div>
+  <div class="sheet-body">
+    <div class="hint" style="margin-bottom:14px;">Log a load of grass you moved. This gets recorded as a completed “Moved Grass” entry for tracking — it does not create work for the install crew.</div>
+    <div class="field"><label>Subdivision</label><input id="ms-subdivision" placeholder="e.g. Selah Meadows"></div>
+    <div class="field"><label>Where it went (address) *</label><input id="ms-address" placeholder="123 Oak St"></div>
+    <div class="field"><label>Lot #</label><input id="ms-lot" placeholder="Optional"></div>
+    <div class="field"><label>Where it came from</label><input id="ms-from" placeholder="e.g. Farm, Selah Meadows Lot 4, back lot"></div>
+    <div class="field-row">
+      <div class="field"><label>Big Rolls</label><input id="ms-rolls" type="number" inputmode="numeric" placeholder="0"></div>
+      <div class="field"><label>Pallets</label><input id="ms-pallets" type="number" inputmode="numeric" placeholder="0"></div>
+    </div>
+    <div class="field"><label>Date moved</label><input id="ms-date" type="date"></div>
+    <div class="field"><label>Notes</label><textarea id="ms-notes" placeholder="Anything worth noting about this load (optional)"></textarea></div>
+    <button class="btn btn-primary btn-block" id="btn-save-movedsod">Save Moved Sod</button>
   </div>
 </div>
 
@@ -1120,9 +1182,20 @@
   function isCompleted(j){ return j && j.status === "completed"; }
   function isUpcoming(j){ return j && j.status === "upcoming"; }
   function isMeasured(j){ return j && j.status === "measured"; }
+  // A "moved grass" record: logged by a driver from the Move Grass tab. It lives
+  // in Completed alongside real install jobs (addresses can repeat on purpose),
+  // but it is NOT install work, so it stays out of the completed-work totals.
+  function isGrassMove(j){ return j && j.kind === "grassmove"; }
+  // Billed = a completed job the office has invoiced. It leaves the Completed
+  // tab for the managers-only Billed screen, where it waits to be deleted by
+  // hand. Nothing removes a billed job automatically.
+  function isBilled(j){ return j && j.status === "billed"; }
+  // "Finished" covers completed and billed — neither is active work, so neither
+  // should trip the duplicate-address check on a new job at the same address.
+  function isFinished(j){ return isCompleted(j) || isBilled(j); }
   // The lifecycle stage of a job: "measured" | "upcoming" | "open" | "completed".
   // A "measured yard" is a saved measurement, not an open job yet.
-  function jobStatus(j){ return isCompleted(j) ? "completed" : (isUpcoming(j) ? "upcoming" : (isMeasured(j) ? "measured" : "open")); }
+  function jobStatus(j){ return isBilled(j) ? "billed" : (isCompleted(j) ? "completed" : (isUpcoming(j) ? "upcoming" : (isMeasured(j) ? "measured" : "open"))); }
   // Square footage: 1 big roll = 400 sq ft, 1 pallet = 500 sq ft. (Change here if these ever change.)
   const SQFT_PER_ROLL = 400, SQFT_PER_PALLET = 500;
   function sqFt(bigRolls, pallets){ return (parseInt(bigRolls,10)||0) * SQFT_PER_ROLL + (parseInt(pallets,10)||0) * SQFT_PER_PALLET; }
@@ -1148,8 +1221,16 @@
     tabBtns.forEach(b => b.classList.toggle("active", b.dataset.tab === name));
     document.querySelectorAll(".view").forEach(v => v.classList.remove("active"));
     document.getElementById("view-" + name).classList.add("active");
+    // "Add New Moved Sod" lives on the Move Grass tab only, for drivers + managers.
+    document.getElementById("btn-add-moved-sod").style.display =
+      (name === "movegrass" && can.moveGrass()) ? "inline-flex" : "none";
+    // "Billed" is managers only, and only alongside the jobs it belongs to.
+    const billedBtn = document.getElementById("btn-billed-tab");
+    billedBtn.style.display = (can.isManager() && (name === "install" || name === "billed")) ? "inline-flex" : "none";
+    billedBtn.classList.toggle("on", name === "billed");
     if (name === "movegrass") renderMoveGrassList();
     if (name === "grade") renderGradeList();
+    if (name === "billed") renderBilledList();
   }
   tabBtns.forEach(btn => btn.addEventListener("click", () => activateTab(btn.dataset.tab)));
 
@@ -1184,8 +1265,10 @@
     // Pins is for everyone except Graders (who are locked to Grade only).
     document.getElementById("tab-places").classList.toggle("hidden-by-role", !can.usePins());
     document.getElementById("job-tabs").style.display = "";
-    // The standalone Maintenance Request button — Techs, Drivers, Mechanics, Managers.
-    document.getElementById("maint-bar").style.display = can.requestMaint() ? "flex" : "none";
+    // The standalone button bar: Maintenance Request (Techs, Drivers, Mechanics,
+    // Managers) and Add New Moved Sod (Drivers, Managers — Move Grass tab only).
+    document.getElementById("btn-maint-request").style.display = can.requestMaint() ? "inline-flex" : "none";
+    document.getElementById("maint-bar").style.display = (can.requestMaint() || can.moveGrass()) ? "flex" : "none";
 
     // Only managers get Upcoming / Completed sub-tabs and the exports.
     // Measured is available to the whole crew (they do the measuring).
@@ -1354,7 +1437,7 @@
 
     // Prevent a duplicate OPEN job at the same address. Completed jobs don't
     // block reuse, so an address frees up once its job is marked complete.
-    const dupe = jobsCache.find(j => j.id !== jobId && !isCompleted(j) && normAddr(j.address) === normAddr(address));
+    const dupe = jobsCache.find(j => j.id !== jobId && !isFinished(j) && normAddr(j.address) === normAddr(address));
     if (dupe){
       const stage = isUpcoming(dupe) ? "upcoming" : "open";
       alert("That address already has an " + stage + " job:\n\n“" + dupe.address + "”\n\nComplete it first, or open it to edit.");
@@ -1437,7 +1520,7 @@
 
   function renderJobList(){
     // Keep the Measured / Upcoming / Open / Completed sub-tab counts current.
-    const counts = { measured:0, upcoming:0, open:0, completed:0 };
+    const counts = { measured:0, upcoming:0, open:0, completed:0, billed:0 };
     jobsCache.forEach(j => counts[jobStatus(j)]++);
     document.getElementById("subtab-measured").textContent = "Measured" + (counts.measured ? " (" + counts.measured + ")" : "");
     document.getElementById("subtab-upcoming").textContent = "Upcoming" + (counts.upcoming ? " (" + counts.upcoming + ")" : "");
@@ -1462,8 +1545,18 @@
       return;
     }
     const measuredMode = currentJobFilter === "measured";
-    const totalSqFt = filtered.reduce((s, j) => s + (measuredMode ? (j.measuredSqFt||0) : jobSqFt(j)), 0);
-    const totalBanner = `<div style="background:var(--card); border:1px solid var(--line); border-radius:11px; padding:11px 14px; margin-bottom:12px; font-size:14px; font-weight:650; box-shadow:var(--shadow);">Total ${currentJobFilter} ${measuredMode?"area":"work"}: <span style="color:var(--turf); font-weight:750;">${fmtSqFt(Math.round(totalSqFt))}</span> <span style="color:var(--ink-soft); font-weight:600;">· ${filtered.length} ${measuredMode?"yard":"job"}${filtered.length===1?"":"s"}</span></div>`;
+    // Moved-grass records are tracked separately so they never inflate the
+    // install-work total (the same address often has a real install job too).
+    const installOnly = filtered.filter(j => !isGrassMove(j));
+    const moveRecords = filtered.filter(isGrassMove);
+    const totalSqFt = installOnly.reduce((s, j) => s + (measuredMode ? (j.measuredSqFt||0) : jobSqFt(j)), 0);
+    const totalBanner = `<div style="background:var(--card); border:1px solid var(--line); border-radius:11px; padding:11px 14px; margin-bottom:12px; font-size:14px; font-weight:650; box-shadow:var(--shadow);">Total ${currentJobFilter} ${measuredMode?"area":"work"}: <span style="color:var(--turf); font-weight:750;">${fmtSqFt(Math.round(totalSqFt))}</span> <span style="color:var(--ink-soft); font-weight:600;">· ${installOnly.length} ${measuredMode?"yard":"job"}${installOnly.length===1?"":"s"}</span></div>`;
+    let moveBanner = "";
+    if (moveRecords.length){
+      const mr = moveRecords.reduce((s,j) => s + (parseInt(j.bigRolls,10)||0), 0);
+      const mp = moveRecords.reduce((s,j) => s + (parseInt(j.pallets,10)||0), 0);
+      moveBanner = `<div style="background:var(--turf-light); color:var(--turf); border:1px solid #C6DCC2; border-radius:11px; padding:11px 14px; margin-bottom:12px; font-size:14px; font-weight:700;">🌱 Moved grass (tracked separately): ${mr} big rolls · ${mp} pallets <span style="font-weight:600; opacity:.8;">· ${moveRecords.length} load${moveRecords.length===1?"":"s"}</span></div>`;
+    }
     let grassBanner = "";
     if (currentJobFilter === "completed"){
       const pend = filtered.filter(j => j.grassLeft && !j.grassMoved);
@@ -1473,14 +1566,19 @@
         grassBanner = `<div style="background:var(--warn-light); color:var(--warn); border:1px solid #E9C2A6; border-radius:11px; padding:11px 14px; margin-bottom:12px; font-size:14px; font-weight:700;">🌱 Grass still on job sites: ${gr} big rolls · ${gp} pallets</div>`;
       }
     }
-    jobListEl.innerHTML = totalBanner + grassBanner + filtered.map(j => {
+    jobListEl.innerHTML = totalBanner + moveBanner + grassBanner + filtered.map(j => {
       const st = jobStatus(j);
       const dateStr = st === "completed" && j.completedAt
         ? "Completed " + new Date(j.completedAt).toLocaleDateString(undefined,{month:'short',day:'numeric',year:'numeric'})
         : st === "measured"
           ? (j.createdByName ? "Measured by " + escapeHtml(j.createdByName) + " · " : "") + new Date(j.createdAt).toLocaleDateString(undefined,{month:'short',day:'numeric',year:'numeric'})
           : new Date(j.createdAt).toLocaleDateString(undefined,{month:'short',day:'numeric',year:'numeric'});
-      const statsHtml = st === "measured"
+      const statsHtml = isGrassMove(j)
+        ? `<span class="pill low">🌱 ${j.bigRolls || 0} big rolls</span>
+           <span class="pill low">${j.pallets || 0} pallets</span>
+           <span class="pill" style="background:var(--turf); color:#fff;">🌱 Moved Grass</span>
+           ${j.movedFrom ? `<span class="pill photos">From: ${escapeHtml(j.movedFrom)}</span>` : ""}`
+        : st === "measured"
         ? `<span class="pill" style="background:#E6EFE4; color:var(--turf);">${(j.measuredSqFt||0).toLocaleString()} sq ft measured</span> <span class="pill upcoming">📐 Measured</span> ${accessChipsHtml(j)}${j.notes ? ` <span class="pill photos">📝 Notes</span>` : ""}`
         : `<span class="pill">${j.bigRolls || 0} rolls</span>
            <span class="pill soil">${j.pallets || 0} pallets</span>
@@ -1514,10 +1612,18 @@
   document.getElementById("job-search").addEventListener("input", renderJobList);
 
   document.getElementById("btn-export-jobs").addEventListener("click", () => {
-    const rows = [["Subdivision","Address","Lot #","Big Rolls","Pallets","Sq Ft","Maps Link","Notes","Photo Count","Status","Created","Completed"]];
+    // "Type" tells an install job apart from a moved-grass tabulation — the same
+    // address can legitimately appear as both. Moved-grass rows report no sq ft
+    // so a spreadsheet total of the column stays true install work.
+    const rows = [["Type","Invoice #","Subdivision","Address","Lot #","Big Rolls","Pallets","Sq Ft","Moved From","Maps Link","Notes","Photo Count","Status","Logged By","Created","Completed"]];
     jobsCache.forEach(j => rows.push([
-      j.subdivision||"", j.address, j.lot||"", j.bigRolls||0, j.pallets||0, jobSqFt(j), j.mapsLink||"", j.notes||"",
+      isGrassMove(j) ? "Moved Grass" : "Install",
+      j.invoiceNumber||"",
+      j.subdivision||"", j.address, j.lot||"", j.bigRolls||0, j.pallets||0,
+      isGrassMove(j) ? "" : jobSqFt(j),
+      j.movedFrom||"", j.mapsLink||"", j.notes||"",
       (j.photos||[]).length, jobStatus(j).charAt(0).toUpperCase() + jobStatus(j).slice(1),
+      j.createdByName||"",
       new Date(j.createdAt).toLocaleDateString(),
       j.completedAt ? new Date(j.completedAt).toLocaleDateString() : ""
     ]));
@@ -1532,6 +1638,40 @@
 
   function openJobDetail(job){
     const body = document.getElementById("detail-body");
+    // A moved-grass record is a tabulation, not install work — show it plainly
+    // with no Edit / Finish / Reopen, so it can't be turned into a crew job.
+    if (isGrassMove(job)){
+      body.innerHTML = `
+        <div class="detail-hero">
+          ${job.subdivision ? `<div class="subdiv">${escapeHtml(job.subdivision)}</div>` : ""}
+          <div class="addr">${escapeHtml(job.address)}</div>
+          ${job.lot ? `<div class="lot">Lot ${escapeHtml(job.lot)}</div>` : ""}
+          <div class="lot" style="color:var(--turf); font-weight:700;">🌱 Moved Grass${job.completedAt ? " · " + new Date(job.completedAt).toLocaleDateString(undefined,{month:'short',day:'numeric',year:'numeric'}) : ""}</div>
+        </div>
+        <div class="stat-grid">
+          <div class="stat-box"><div class="num">${job.bigRolls || 0}</div><div class="lbl">Big Rolls Moved</div></div>
+          <div class="stat-box"><div class="num">${job.pallets || 0}</div><div class="lbl">Pallets Moved</div></div>
+        </div>
+        ${job.movedFrom ? `<div class="stat-box" style="text-align:center; background:var(--turf-light); border-color:#CFE0CC; margin-bottom:4px;">
+          <div class="num" style="color:var(--turf); font-size:17px;">${escapeHtml(job.movedFrom)}</div>
+          <div class="lbl">Where it came from</div>
+        </div>` : ""}
+        <div class="hint" style="margin-top:10px;">This is a grass-move tabulation, not install work. It is not counted in the completed-work square footage.</div>
+        ${job.notes ? `<div class="section-lbl">Notes</div><div style="font-size:14.5px; line-height:1.5;">${escapeHtml(job.notes)}</div>` : ""}
+        ${job.createdByName ? `<div class="logged-by">Logged by ${escapeHtml(job.createdByName)}</div>` : ""}
+        ${can.isManager() ? `<div style="margin-top:14px;"><button class="btn btn-danger btn-block" id="detail-delete-move">Delete This Entry</button></div>` : ""}`;
+      const delMove = body.querySelector("#detail-delete-move");
+      if (delMove) delMove.addEventListener("click", async () => {
+        if (!confirm("Delete this moved-grass entry? This can't be undone.")) return;
+        delMove.disabled = true;
+        try{ await db.collection("jobs").doc(job.id).delete(); }
+        catch(err){ console.error(err); alert("Couldn't delete — check your connection and try again."); delMove.disabled = false; return; }
+        closeDetailSheet(); await loadJobs(); showToast("Entry deleted");
+      });
+      detailSheetBackdrop.classList.add("show");
+      detailSheet.classList.add("show");
+      return;
+    }
     body.innerHTML = `
       <div class="detail-hero">
         ${job.subdivision ? `<div class="subdiv">${escapeHtml(job.subdivision)}</div>` : ""}
@@ -1574,6 +1714,7 @@
               : "")}
       </div>
       ${can.isManager() && jobStatus(job) === "open" ? `<div style="margin-top:10px;"><button class="btn btn-ghost btn-block" id="detail-unpromote-btn">↩ Move back to Upcoming</button></div>` : ""}
+      ${can.isManager() && isCompleted(job) && !isGrassMove(job) ? `<div style="margin-top:10px;"><button class="btn btn-hauler btn-block" id="detail-billed-btn">🧾 Mark as Billed</button></div>` : ""}
     `;
     body.querySelectorAll(".detail-photo-grid img").forEach(img => {
       img.addEventListener("click", () => {
@@ -1590,6 +1731,8 @@
     if (finishBtn) finishBtn.addEventListener("click", () => { closeDetailSheet(); openFinishSheet(job); });
     const unpromoteBtn = body.querySelector("#detail-unpromote-btn");
     if (unpromoteBtn) unpromoteBtn.addEventListener("click", () => moveToUpcoming(job));
+    const billedBtn2 = body.querySelector("#detail-billed-btn");
+    if (billedBtn2) billedBtn2.addEventListener("click", () => { closeDetailSheet(); openInvoiceSheet(job); });
     detailSheetBackdrop.classList.add("show");
     detailSheet.classList.add("show");
   }
@@ -1644,7 +1787,7 @@
     const completing = !isCompleted(job);
     if (!completing){
       // Reopening: don't create a second open job at an address that's taken again.
-      const clash = jobsCache.find(j => j.id !== job.id && !isCompleted(j) && normAddr(j.address) === normAddr(job.address));
+      const clash = jobsCache.find(j => j.id !== job.id && !isFinished(j) && normAddr(j.address) === normAddr(job.address));
       if (clash){ alert("Can't reopen — “" + clash.address + "” already has another open job. Complete or edit that one first."); return; }
     }
     const btn = document.getElementById("detail-complete-btn");
@@ -2815,7 +2958,7 @@
   }
 
   async function measuredToOpen(job){
-    const clash = jobsCache.find(j => j.id !== job.id && !isCompleted(j) && !isMeasured(j) && normAddr(j.address) === normAddr(job.address));
+    const clash = jobsCache.find(j => j.id !== job.id && !isFinished(j) && !isMeasured(j) && normAddr(j.address) === normAddr(job.address));
     if (clash){ alert("That address already has an active job:\n\n“" + clash.address + "”\n\nComplete or edit that one first."); return; }
     const btn = document.getElementById("btn-measured-to-open");
     if (btn){ btn.disabled = true; btn.textContent = "Moving…"; }
@@ -2887,7 +3030,9 @@
   });
 
   const grassListEl = document.getElementById("grass-list");
-  function grassPending(){ return jobsCache.filter(j => isCompleted(j) && j.grassLeft && !j.grassMoved); }
+  // Billed jobs stay on the pickup list — invoicing the office's paperwork
+  // doesn't collect the grass sitting on the lawn.
+  function grassPending(){ return jobsCache.filter(j => isFinished(j) && j.grassLeft && !j.grassMoved); }
 
   function renderMoveGrassList(){
     if (!grassListEl) return;
@@ -2900,6 +3045,7 @@
     }
     if (jobs.length === 0){
       grassListEl.innerHTML = `<div class="empty"><div class="icon">🌱</div><h3>No grass to move</h3><p>When a finished job has grass left over, it shows up here.</p></div>`;
+      renderMovedSoFar();
       return;
     }
     grassListEl.innerHTML = jobs.map(j => `
@@ -2930,6 +3076,336 @@
       await loadJobs();
       renderMoveGrassList();
       showToast("Grass moved — nice work");
+    }));
+    renderMovedSoFar();
+  }
+
+  // ==================================================
+  // BILLED (managers only)
+  // A completed job that's been invoiced gets status "billed" plus the invoice
+  // number. That takes it off the Completed tab and onto the Billed screen,
+  // reached from the small 🧾 button. Nothing clears a billed job on its own —
+  // a manager deletes it by hand from there, which is also the only place a
+  // finished job (and its photos) can be destroyed.
+  // ==================================================
+  let billingJobId = null;
+  const billedListEl = document.getElementById("billed-list");
+  const invoiceSheet = document.getElementById("invoice-sheet");
+  const invoiceBackdrop = document.getElementById("invoice-sheet-backdrop");
+
+  function closeInvoiceSheet(){ invoiceBackdrop.classList.remove("show"); invoiceSheet.classList.remove("show"); }
+  document.getElementById("invoice-sheet-close").addEventListener("click", closeInvoiceSheet);
+  invoiceBackdrop.addEventListener("click", closeInvoiceSheet);
+
+  function openInvoiceSheet(job){
+    billingJobId = job.id;
+    document.getElementById("invoice-job-line").innerHTML =
+      "<b>" + escapeHtml(job.address || "(no address)") + "</b>" +
+      (job.subdivision ? " · " + escapeHtml(job.subdivision) : "") +
+      (job.lot ? " · Lot " + escapeHtml(job.lot) : "") +
+      " — " + fmtSqFt(jobSqFt(job));
+    // Billing doesn't collect the grass, so say so rather than silently
+    // leaving it on a driver's list.
+    const warn = document.getElementById("invoice-grass-warning");
+    if (job.grassLeft && !job.grassMoved){
+      warn.style.display = "block";
+      warn.innerHTML = `<div style="background:var(--warn-light); color:var(--warn); border-radius:10px; padding:11px 13px; font-size:13.5px; font-weight:650; margin-bottom:14px; line-height:1.45;">
+        🌱 This job still has ${job.leftBigRolls||0} big rolls · ${job.leftPallets||0} pallets waiting for pickup.
+        You can bill it now — it stays on the drivers' Move Grass list either way.</div>`;
+    } else { warn.style.display = "none"; warn.innerHTML = ""; }
+    document.getElementById("inv-number").value = job.invoiceNumber || "";
+    document.getElementById("inv-date").value = todayInputValue();
+    invoiceBackdrop.classList.add("show");
+    invoiceSheet.classList.add("show");
+    setTimeout(() => document.getElementById("inv-number").focus(), 120);
+  }
+
+  document.getElementById("btn-save-invoice").addEventListener("click", async () => {
+    const num = document.getElementById("inv-number").value.trim();
+    if (!num){ document.getElementById("inv-number").focus(); alert("Enter the invoice number this job was billed with."); return; }
+    if (!billingJobId) return;
+    const btn = document.getElementById("btn-save-invoice");
+    btn.disabled = true; btn.textContent = "Saving…";
+    try{
+      await db.collection("jobs").doc(billingJobId).update({
+        status: "billed",
+        invoiceNumber: num,
+        billedAt: dateInputToTs(document.getElementById("inv-date").value),
+        billedByName: actorLabel(),
+        updatedAt: Date.now()
+      });
+    }catch(err){
+      console.error(err);
+      btn.disabled = false; btn.textContent = "Mark as Billed";
+      alert("Couldn't save — check your connection and try again.");
+      return;
+    }
+    btn.disabled = false; btn.textContent = "Mark as Billed";
+    closeInvoiceSheet();
+    closeDetailSheet();
+    await loadJobs();
+    showToast("Billed on invoice " + num);
+  });
+
+  // The 🧾 button toggles between the jobs list and the Billed screen.
+  const billedTabBtn = document.getElementById("btn-billed-tab");
+  billedTabBtn.addEventListener("click", () => {
+    if (!isConfigured || !can.isManager()) return;
+    activateTab(document.getElementById("view-billed").classList.contains("active") ? "install" : "billed");
+  });
+  document.getElementById("btn-billed-back").addEventListener("click", () => activateTab("install"));
+  document.getElementById("billed-search").addEventListener("input", renderBilledList);
+
+  function billedJobs(){
+    return jobsCache.filter(isBilled).slice()
+      .sort((a,b) => (b.billedAt||b.completedAt||0) - (a.billedAt||a.completedAt||0));
+  }
+
+  function renderBilledList(){
+    if (!billedListEl) return;
+    const all = billedJobs();
+    const q = (document.getElementById("billed-search").value || "").toLowerCase().trim();
+    const filtered = all.filter(j => !q
+      || (j.invoiceNumber||"").toLowerCase().includes(q)
+      || (j.address||"").toLowerCase().includes(q)
+      || (j.subdivision||"").toLowerCase().includes(q)
+      || (j.lot||"").toLowerCase().includes(q));
+
+    if (filtered.length === 0){
+      billedListEl.innerHTML = `<div class="empty"><div class="icon">🧾</div><h3>${all.length===0?"Nothing billed yet":"No matches"}</h3><p>${all.length===0?"Open a completed job and tap “🧾 Mark as Billed” to move it here.":"Try a different search."}</p></div>`;
+      return;
+    }
+
+    const totalSqFt = filtered.filter(j => !isGrassMove(j)).reduce((s,j) => s + jobSqFt(j), 0);
+    const banner = `<div style="background:var(--hauler-light); color:var(--hauler); border:1px solid #C6D5E0; border-radius:11px; padding:11px 14px; margin-bottom:12px; font-size:14px; font-weight:700;">🧾 ${filtered.length} billed job${filtered.length===1?"":"s"} · ${fmtSqFt(Math.round(totalSqFt))}<span style="font-weight:600; opacity:.85;"> · waiting to be deleted by hand</span></div>`;
+
+    billedListEl.innerHTML = banner + filtered.map(j => `
+      <div class="job-card completed" data-billedid="${j.id}">
+        <div class="row1"><div>
+          ${j.subdivision ? `<div class="subdiv">${escapeHtml(j.subdivision)}</div>` : ""}
+          <div class="addr">${escapeHtml(j.address || "(no address)")}</div>
+          ${j.lot ? `<div class="lot">Lot ${escapeHtml(j.lot)}</div>` : ""}
+        </div></div>
+        <div class="stats">
+          <span class="invoice-pill">INV ${escapeHtml(j.invoiceNumber || "—")}</span>
+          <span class="pill">${j.bigRolls || 0} rolls</span>
+          <span class="pill soil">${j.pallets || 0} pallets</span>
+          <span class="pill" style="background:#E6EFE4; color:var(--turf);">${jobSqFt(j).toLocaleString()} sq ft</span>
+          ${j.photos && j.photos.length ? `<span class="pill photos">📷 ${j.photos.length}</span>` : ""}
+          ${j.grassLeft && !j.grassMoved ? `<span class="pill low">🌱 Grass still out</span>` : ""}
+        </div>
+        <div class="date">Billed ${j.billedAt ? new Date(j.billedAt).toLocaleDateString(undefined,{month:'short',day:'numeric',year:'numeric'}) : ""}${j.billedByName ? " by " + escapeHtml(j.billedByName) : ""}${j.completedAt ? " · completed " + new Date(j.completedAt).toLocaleDateString(undefined,{month:'short',day:'numeric'}) : ""}</div>
+      </div>`).join("");
+
+    billedListEl.querySelectorAll("[data-billedid]").forEach(card => card.addEventListener("click", () => {
+      const j = jobsCache.find(x => x.id === card.dataset.billedid);
+      if (j) openBilledDetail(j);
+    }));
+  }
+
+  function openBilledDetail(job){
+    const body = document.getElementById("detail-body");
+    const photoCount = (job.photos||[]).length;
+    body.innerHTML = `
+      <div class="detail-hero">
+        ${job.subdivision ? `<div class="subdiv">${escapeHtml(job.subdivision)}</div>` : ""}
+        <div class="addr">${escapeHtml(job.address || "(no address)")}</div>
+        ${job.lot ? `<div class="lot">Lot ${escapeHtml(job.lot)}</div>` : ""}
+        <div class="lot" style="color:var(--hauler); font-weight:700;">🧾 Billed on invoice ${escapeHtml(job.invoiceNumber || "—")}${job.billedAt ? " · " + new Date(job.billedAt).toLocaleDateString(undefined,{month:'short',day:'numeric',year:'numeric'}) : ""}</div>
+      </div>
+      <div class="stat-grid">
+        <div class="stat-box"><div class="num">${job.bigRolls || 0}</div><div class="lbl">Big Rolls</div></div>
+        <div class="stat-box"><div class="num">${job.pallets || 0}</div><div class="lbl">Pallets</div></div>
+      </div>
+      <div class="stat-box" style="text-align:center; background:var(--turf-light); border-color:#CFE0CC; margin-bottom:4px;">
+        <div class="num" style="color:var(--turf);">${fmtSqFt(jobSqFt(job))}</div>
+        <div class="lbl">Total Square Footage</div>
+      </div>
+      ${job.grassLeft && !job.grassMoved ? `<div class="stat-box" style="text-align:center; background:var(--warn-light); border-color:#E9C2A6; margin-bottom:4px;">
+        <div class="num" style="color:var(--warn); font-size:17px;">🌱 ${job.leftBigRolls||0} big rolls · ${job.leftPallets||0} pallets</div>
+        <div class="lbl">Still on site — a driver hasn't picked it up</div>
+      </div>` : ""}
+      ${job.notes ? `<div class="section-lbl">Notes</div><div style="font-size:14.5px; line-height:1.5;">${escapeHtml(job.notes)}</div>` : ""}
+      <div class="section-lbl">Photos (${photoCount})</div>
+      ${photoCount ? `<div class="detail-photo-grid">${job.photos.map(p => `<img src="${p.url}" data-src="${p.url}">`).join("")}</div>` : `<div class="hint">No photos on this job.</div>`}
+      <div class="logged-by">${job.completedByName ? "Completed by " + escapeHtml(job.completedByName) + " · " : ""}Billed by ${escapeHtml(job.billedByName || "—")}</div>
+      <div style="margin-top:16px;">
+        <button class="btn btn-ghost btn-block" id="btn-edit-invoice">Change invoice number</button>
+        <button class="btn btn-ghost btn-block" id="btn-unbill" style="margin-top:8px;">↩ Move back to Completed</button>
+        <button class="btn btn-danger btn-block" id="btn-purge-job" style="margin-top:14px;">Delete Permanently</button>
+        <div class="hint" style="margin-top:8px;">Deleting removes the job${photoCount ? " and all " + photoCount + " photo" + (photoCount===1?"":"s") : ""} for good. There is no backup — this cannot be undone.</div>
+      </div>`;
+
+    body.querySelectorAll(".detail-photo-grid img").forEach(img => img.addEventListener("click", () => {
+      document.getElementById("lb-img").src = img.dataset.src;
+      document.getElementById("lightbox").classList.add("show");
+    }));
+    body.querySelector("#btn-edit-invoice").addEventListener("click", () => { closeDetailSheet(); openInvoiceSheet(job); });
+    body.querySelector("#btn-unbill").addEventListener("click", () => unbillJob(job));
+    body.querySelector("#btn-purge-job").addEventListener("click", () => purgeJob(job));
+
+    detailSheetBackdrop.classList.add("show");
+    detailSheet.classList.add("show");
+  }
+
+  async function unbillJob(job){
+    if (!confirm("Move this job back to the Completed tab? The invoice number will be cleared.")) return;
+    try{
+      await db.collection("jobs").doc(job.id).update({
+        status: "completed", invoiceNumber: "", billedAt: 0, billedByName: "", updatedAt: Date.now()
+      });
+    }catch(err){ console.error(err); alert("Couldn't move it back — check your connection and try again."); return; }
+    closeDetailSheet(); await loadJobs(); renderBilledList(); showToast("Moved back to Completed");
+  }
+
+  // The only place a finished job can be destroyed. Two confirmations, because
+  // the photos go with it and nothing keeps a copy.
+  async function purgeJob(job){
+    const n = (job.photos||[]).length;
+    if (!confirm("Permanently delete this job" + (n ? " and its " + n + " photo" + (n===1?"":"s") : "") + "?\n\n" + (job.address||"") + (job.invoiceNumber ? "  ·  Invoice " + job.invoiceNumber : "") + "\n\nThis cannot be undone.")) return;
+    if (!confirm("Last check — delete it for good?")) return;
+    try{
+      if (job.photos){
+        await Promise.all(job.photos.filter(p => p.storagePath).map(p => storage.ref(p.storagePath).delete().catch(()=>{})));
+      }
+      await db.collection("jobs").doc(job.id).delete();
+    }catch(err){ console.error(err); alert("Couldn't delete — check your connection and try again."); return; }
+    closeDetailSheet(); await loadJobs(); renderBilledList(); showToast("Deleted for good");
+  }
+
+  document.getElementById("btn-export-billed").addEventListener("click", () => {
+    const rows = [["Invoice #","Subdivision","Address","Lot #","Big Rolls","Pallets","Sq Ft","Completed","Billed","Billed By","Notes"]];
+    billedJobs().forEach(j => rows.push([
+      j.invoiceNumber||"", j.subdivision||"", j.address||"", j.lot||"", j.bigRolls||0, j.pallets||0, jobSqFt(j),
+      j.completedAt ? new Date(j.completedAt).toLocaleDateString() : "",
+      j.billedAt ? new Date(j.billedAt).toLocaleDateString() : "",
+      j.billedByName||"", j.notes||""
+    ]));
+    downloadCsv("sod-billed-jobs.csv", rows);
+  });
+
+  // ==================================================
+  // ADD NEW MOVED SOD (drivers + managers, Move Grass tab only)
+  // Logs a load of grass that was moved. Saved into `jobs` as a completed
+  // record with kind:"grassmove" so it shows up on the Completed tab for the
+  // office, tagged and kept out of the install-work totals. Duplicate
+  // addresses against a real install job are expected and fine.
+  // ==================================================
+  const movedSodSheet = document.getElementById("movedsod-sheet");
+  const movedSodBackdrop = document.getElementById("movedsod-sheet-backdrop");
+  function closeMovedSodSheet(){ movedSodBackdrop.classList.remove("show"); movedSodSheet.classList.remove("show"); }
+  document.getElementById("movedsod-sheet-close").addEventListener("click", closeMovedSodSheet);
+  movedSodBackdrop.addEventListener("click", closeMovedSodSheet);
+
+  // A yyyy-mm-dd string for the date box, in the phone's own timezone.
+  function todayInputValue(){
+    const d = new Date();
+    return d.getFullYear() + "-" + String(d.getMonth()+1).padStart(2,"0") + "-" + String(d.getDate()).padStart(2,"0");
+  }
+  // Turn the date box back into a timestamp at local noon, so the date shown
+  // never slips a day from timezone rounding.
+  function dateInputToTs(v){
+    if (!v) return Date.now();
+    const p = v.split("-").map(Number);
+    if (p.length !== 3 || !p[0]) return Date.now();
+    return new Date(p[0], p[1]-1, p[2], 12, 0, 0).getTime();
+  }
+
+  document.getElementById("btn-add-moved-sod").addEventListener("click", () => {
+    if (!isConfigured) return;
+    ["ms-subdivision","ms-address","ms-lot","ms-from","ms-rolls","ms-pallets","ms-notes"].forEach(id => { document.getElementById(id).value = ""; });
+    document.getElementById("ms-date").value = todayInputValue();
+    movedSodBackdrop.classList.add("show");
+    movedSodSheet.classList.add("show");
+  });
+
+  document.getElementById("btn-save-movedsod").addEventListener("click", async () => {
+    const address = document.getElementById("ms-address").value.trim();
+    if (!address){ document.getElementById("ms-address").focus(); alert("Please enter where the grass went."); return; }
+    const rolls = parseInt(document.getElementById("ms-rolls").value,10)||0;
+    const pallets = parseInt(document.getElementById("ms-pallets").value,10)||0;
+    if (rolls === 0 && pallets === 0){ alert("Enter how many big rolls or pallets you moved."); return; }
+
+    const btn = document.getElementById("btn-save-movedsod");
+    btn.disabled = true; btn.textContent = "Saving…";
+    const movedAt = dateInputToTs(document.getElementById("ms-date").value);
+    const rec = {
+      id: uid("gmove"),
+      kind: "grassmove",
+      status: "completed",
+      subdivision: document.getElementById("ms-subdivision").value.trim(),
+      address: address,
+      lot: document.getElementById("ms-lot").value.trim(),
+      movedFrom: document.getElementById("ms-from").value.trim(),
+      bigRolls: rolls,
+      pallets: pallets,
+      notes: document.getElementById("ms-notes").value.trim(),
+      photos: [],
+      grassLeft: false,
+      grassMoved: false,
+      completedAt: movedAt,
+      completedByName: actorLabel(),
+      createdAt: movedAt,
+      createdByName: actorLabel(),
+      createdByUid: (currentUser && currentUser.uid) || "",
+      updatedAt: Date.now()
+    };
+    try{ await db.collection("jobs").doc(rec.id).set(rec); }
+    catch(err){
+      console.error(err);
+      btn.disabled = false; btn.textContent = "Save Moved Sod";
+      alert("Couldn't save — check your connection and try again.");
+      return;
+    }
+    btn.disabled = false; btn.textContent = "Save Moved Sod";
+    closeMovedSodSheet();
+    await loadJobs();
+    renderMoveGrassList();
+    showToast("Moved sod logged ✓");
+  });
+
+  // "Moved so far" log on the Move Grass tab, so the driver can see (and undo)
+  // their own entries — they can't see the Completed tab.
+  function renderMovedSoFar(){
+    const el = document.getElementById("grass-moved-log");
+    if (!el) return;
+    const moves = jobsCache.filter(isGrassMove).slice().sort((a,b) => (b.completedAt||0) - (a.completedAt||0));
+    if (moves.length === 0){ el.innerHTML = ""; return; }
+    const tr = moves.reduce((s,j) => s + (parseInt(j.bigRolls,10)||0), 0);
+    const tp = moves.reduce((s,j) => s + (parseInt(j.pallets,10)||0), 0);
+    const recent = moves.slice(0, 20);
+    el.innerHTML = `
+      <div style="margin:22px 0 10px; font-size:13px; font-weight:800; letter-spacing:.04em; text-transform:uppercase; color:var(--ink-soft);">Moved so far</div>
+      <div class="measure-total" style="font-size:16px;">Grass moved: ${tr} big rolls · ${tp} pallets</div>
+      ${recent.map(j => {
+        const mine = can.isManager() || (j.createdByUid && currentUser && j.createdByUid === currentUser.uid);
+        return `
+        <div class="job-card">
+          <div class="row1"><div>
+            ${j.subdivision ? `<div class="subdiv">${escapeHtml(j.subdivision)}</div>` : ""}
+            <div class="addr">${escapeHtml(j.address)}</div>
+            ${j.lot ? `<div class="lot">Lot ${escapeHtml(j.lot)}</div>` : ""}
+          </div></div>
+          <div class="stats">
+            <span class="pill low">🌱 ${j.bigRolls||0} big rolls</span>
+            <span class="pill low">${j.pallets||0} pallets</span>
+            ${j.movedFrom ? `<span class="pill photos">From: ${escapeHtml(j.movedFrom)}</span>` : ""}
+          </div>
+          ${j.notes ? `<div class="hint" style="margin-top:8px;">${escapeHtml(j.notes)}</div>` : ""}
+          <div class="date">${j.createdByName ? escapeHtml(j.createdByName) + " · " : ""}${new Date(j.completedAt||j.createdAt).toLocaleDateString(undefined,{month:'short',day:'numeric',year:'numeric'})}</div>
+          ${mine ? `<button class="btn btn-danger btn-block" data-undo-move="${j.id}" style="margin-top:10px; padding:9px;">Remove this entry</button>` : ""}
+        </div>`;
+      }).join("")}
+      ${moves.length > recent.length ? `<div class="hint" style="text-align:center;">Showing the ${recent.length} most recent of ${moves.length}.</div>` : ""}`;
+
+    el.querySelectorAll("[data-undo-move]").forEach(btn => btn.addEventListener("click", async () => {
+      if (!confirm("Remove this moved-sod entry? It'll come off the Completed list too.")) return;
+      btn.disabled = true;
+      try{ await db.collection("jobs").doc(btn.dataset.undoMove).delete(); }
+      catch(err){ console.error(err); alert("Couldn't remove — check your connection and try again."); btn.disabled = false; return; }
+      await loadJobs();
+      renderMoveGrassList();
+      showToast("Entry removed");
     }));
   }
 
