@@ -308,10 +308,25 @@
   /* "Add New Moved Sod" — same small shape, turf green. Move Grass tab only. */
   .maint-btn.grass-add-btn{border-color:var(--turf); background:var(--turf); color:#fff;}
   .maint-btn.grass-add-btn:active{background:#25401F;}
-  /* "Billed" — managers only. Office blue, and it stays lit while you're on it. */
-  .maint-btn.billed-btn{border-color:var(--hauler-light); background:var(--hauler-light); color:var(--hauler);}
-  .maint-btn.billed-btn:active{background:#CBD9E4;}
-  .maint-btn.billed-btn.on{background:var(--hauler); border-color:var(--hauler); color:#fff;}
+  /* Manager-only record screens — Billed and Grass History. Office blue, and
+     each stays lit while you're on it. */
+  .maint-btn.billed-btn, .maint-btn.history-btn{border-color:var(--hauler-light); background:var(--hauler-light); color:var(--hauler);}
+  .maint-btn.billed-btn:active, .maint-btn.history-btn:active{background:#CBD9E4;}
+  .maint-btn.billed-btn.on, .maint-btn.history-btn.on{background:var(--hauler); border-color:var(--hauler); color:#fff;}
+  /* One history row: where it came from, where it went. */
+  .gh-route{display:flex; align-items:center; gap:8px; flex-wrap:wrap; margin-top:9px; font-size:14px; line-height:1.4;}
+  .gh-route .leg{font-weight:650;}
+  .gh-route .arrow{color:var(--ink-soft); font-weight:700;}
+  .gh-lbl{font-size:10.5px; font-weight:800; letter-spacing:.09em; text-transform:uppercase; color:var(--ink-soft); display:block; margin-bottom:1px;}
+  .gh-month{margin:20px 0 9px; font-size:12px; font-weight:800; letter-spacing:.09em; text-transform:uppercase; color:var(--ink-soft);}
+  .gh-filters{display:flex; gap:6px; flex-wrap:wrap; margin-bottom:12px;}
+  .gh-chip{
+    border:1.5px solid var(--line); background:var(--card); color:var(--ink-soft);
+    border-radius:9px; padding:7px 12px; font-size:12.5px; font-weight:650;
+    cursor:pointer; font-family:inherit; white-space:nowrap;
+  }
+  .gh-chip.active{background:var(--hauler); color:#fff; border-color:var(--hauler);}
+  .gh-expiring{background:var(--warn-light); color:var(--warn);}
   .invoice-pill{
     font-family:ui-monospace, "SF Mono", Menlo, monospace;
     font-size:12.5px; font-weight:700; letter-spacing:.02em;
@@ -459,6 +474,7 @@
     </div>
     <div class="maint-bar" id="maint-bar" style="display:none;">
       <button class="maint-btn grass-add-btn" id="btn-add-moved-sod" style="display:none;">🌱 Add New Moved Sod</button>
+      <button class="maint-btn history-btn" id="btn-grass-history" style="display:none;">📋 Grass History</button>
       <button class="maint-btn billed-btn" id="btn-billed-tab" style="display:none;">🧾 Billed</button>
       <button class="maint-btn" id="btn-maint-request">🔧 Maintenance Request</button>
     </div>
@@ -552,6 +568,27 @@
         </div>
         <div id="request-list"></div>
       </div>
+    </section>
+
+    <section id="view-grasshistory" class="view">
+      <div class="fab-row">
+        <button class="btn btn-ghost" id="btn-grasshistory-back">← Back to Move Grass</button>
+        <button class="btn btn-ghost" id="btn-export-grasshistory" title="Export to CSV">⬇ CSV</button>
+      </div>
+      <div id="gh-totals"></div>
+      <div class="gh-filters" id="gh-range">
+        <button class="gh-chip active" data-ghrange="30">Last 30 days</button>
+        <button class="gh-chip" data-ghrange="all">Everything</button>
+      </div>
+      <div class="field" style="margin-bottom:12px;">
+        <label>Logged by</label>
+        <select id="gh-driver"></select>
+      </div>
+      <div class="search-wrap">
+        <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="11" cy="11" r="7"/><line x1="21" y1="21" x2="16.65" y2="16.65"/></svg>
+        <input id="gh-search" placeholder="Search by address, where it came from, or who logged it">
+      </div>
+      <div id="gh-list"></div>
     </section>
 
     <section id="view-billed" class="view">
@@ -1228,9 +1265,16 @@
     const billedBtn = document.getElementById("btn-billed-tab");
     billedBtn.style.display = (can.isManager() && (name === "install" || name === "billed")) ? "inline-flex" : "none";
     billedBtn.classList.toggle("on", name === "billed");
+    // "Grass History" is managers only, on the Move Grass tab and its own screen.
+    const ghBtn = document.getElementById("btn-grass-history");
+    ghBtn.style.display = (can.isManager() && (name === "movegrass" || name === "grasshistory")) ? "inline-flex" : "none";
+    ghBtn.classList.toggle("on", name === "grasshistory");
+    // The moved-sod button belongs with Move Grass, so keep it up on both.
+    if (name === "grasshistory" && can.moveGrass()) document.getElementById("btn-add-moved-sod").style.display = "none";
     if (name === "movegrass") renderMoveGrassList();
     if (name === "grade") renderGradeList();
     if (name === "billed") renderBilledList();
+    if (name === "grasshistory") renderGrassHistory();
   }
   tabBtns.forEach(btn => btn.addEventListener("click", () => activateTab(btn.dataset.tab)));
 
@@ -3081,6 +3125,183 @@
   }
 
   // ==================================================
+  // GRASS HISTORY (managers only)
+  // One combined record of every load of grass that actually moved, from two
+  // sources that look the same to a reader but are stored differently:
+  //   1. "Add New Moved Sod" entries — a standalone record with both ends.
+  //   2. Confirmed pickups — a real install job whose leftover grass a driver
+  //      cleared with "✓ Grass Moved". The job itself is the "from".
+  // Entries age out of the default view after 30 days; nothing is destroyed by
+  // that, and "Everything" still shows them. Managers can also remove an entry
+  // for good — which deletes a standalone log, but only hides a confirmed
+  // pickup, because that record is a real job with photos attached.
+  // ==================================================
+  const GH_WINDOW_DAYS = 30;
+  let ghRange = "30";
+  const ghListEl = document.getElementById("gh-list");
+
+  // Flatten both sources into one shape so the list, totals and CSV can treat
+  // them identically.
+  function grassHistoryEntries(){
+    const out = [];
+    jobsCache.forEach(j => {
+      if (isGrassMove(j)){
+        out.push({
+          id: j.id, kind: "logged", job: j,
+          from: j.movedFrom || "", to: j.address || "",
+          rolls: parseInt(j.bigRolls,10)||0, pallets: parseInt(j.pallets,10)||0,
+          who: j.createdByName || "", when: j.completedAt || j.createdAt || 0,
+          notes: j.notes || "",
+          subdivision: j.subdivision || "", lot: j.lot || ""
+        });
+      } else if (j.grassLeft && j.grassMoved && !j.grassHistoryHidden){
+        out.push({
+          id: j.id, kind: "pickup", job: j,
+          from: j.address || "", to: "",
+          rolls: parseInt(j.leftBigRolls,10)||0, pallets: parseInt(j.leftPallets,10)||0,
+          who: j.grassMovedByName || "", when: j.grassMovedAt || j.completedAt || 0,
+          notes: j.grassNotes || "",
+          subdivision: j.subdivision || "", lot: j.lot || ""
+        });
+      }
+    });
+    return out.sort((a,b) => b.when - a.when);
+  }
+
+  function ghCutoff(){ return Date.now() - GH_WINDOW_DAYS * 86400000; }
+
+  function ghVisible(){
+    const all = grassHistoryEntries();
+    const byRange = ghRange === "all" ? all : all.filter(e => e.when >= ghCutoff());
+    const who = document.getElementById("gh-driver").value;
+    const byWho = who ? byRange.filter(e => e.who === who) : byRange;
+    const q = (document.getElementById("gh-search").value || "").toLowerCase().trim();
+    if (!q) return byWho;
+    return byWho.filter(e =>
+      e.from.toLowerCase().includes(q) || e.to.toLowerCase().includes(q) ||
+      e.who.toLowerCase().includes(q) || e.notes.toLowerCase().includes(q) ||
+      e.subdivision.toLowerCase().includes(q) || e.lot.toLowerCase().includes(q));
+  }
+
+  function populateGhDrivers(){
+    const sel = document.getElementById("gh-driver");
+    const keep = sel.value;
+    const names = Array.from(new Set(grassHistoryEntries().map(e => e.who).filter(Boolean)))
+      .sort((a,b) => a.toLowerCase().localeCompare(b.toLowerCase()));
+    sel.innerHTML = `<option value="">Everyone</option>` +
+      names.map(n => `<option value="${escapeHtml(n)}">${escapeHtml(n)}</option>`).join("");
+    if (keep && names.indexOf(keep) >= 0) sel.value = keep;
+  }
+
+  document.querySelectorAll("[data-ghrange]").forEach(btn => btn.addEventListener("click", () => {
+    ghRange = btn.dataset.ghrange;
+    document.querySelectorAll("[data-ghrange]").forEach(b => b.classList.toggle("active", b === btn));
+    renderGrassHistory();
+  }));
+  document.getElementById("gh-driver").addEventListener("change", renderGrassHistory);
+  document.getElementById("gh-search").addEventListener("input", renderGrassHistory);
+  document.getElementById("btn-grasshistory-back").addEventListener("click", () => activateTab("movegrass"));
+  document.getElementById("btn-grass-history").addEventListener("click", () => {
+    if (!isConfigured || !can.isManager()) return;
+    activateTab(document.getElementById("view-grasshistory").classList.contains("active") ? "movegrass" : "grasshistory");
+  });
+
+  function renderGrassHistory(){
+    if (!ghListEl) return;
+    populateGhDrivers();
+    const rows = ghVisible();
+    const totalAll = grassHistoryEntries().length;
+
+    const tr = rows.reduce((s,e) => s + e.rolls, 0);
+    const tp = rows.reduce((s,e) => s + e.pallets, 0);
+    document.getElementById("gh-totals").innerHTML = `
+      <div style="display:flex; gap:8px; margin-bottom:12px;">
+        <div class="stat-box" style="flex:1; text-align:center;"><div class="num">${rows.length}</div><div class="lbl">Loads</div></div>
+        <div class="stat-box" style="flex:1; text-align:center;"><div class="num">${tr}</div><div class="lbl">Big Rolls</div></div>
+        <div class="stat-box" style="flex:1; text-align:center;"><div class="num">${tp}</div><div class="lbl">Pallets</div></div>
+      </div>`;
+
+    if (rows.length === 0){
+      ghListEl.innerHTML = `<div class="empty"><div class="icon">📋</div><h3>${totalAll===0?"No grass moved yet":"Nothing in this view"}</h3><p>${totalAll===0?"Confirmed pickups and logged moves both land here.":"Try “Everything”, a different person, or clear the search."}</p></div>`;
+      return;
+    }
+
+    // Group by month so a long history stays readable.
+    let html = "";
+    let lastMonth = "";
+    rows.forEach(e => {
+      const d = new Date(e.when);
+      const month = d.toLocaleDateString(undefined,{month:'long', year:'numeric'});
+      if (month !== lastMonth){ html += `<div class="gh-month">${escapeHtml(month)}</div>`; lastMonth = month; }
+      const aging = ghRange === "all" && e.when < ghCutoff();
+      const route = e.kind === "logged"
+        ? `<div class="gh-route">
+             <div><span class="gh-lbl">From</span><span class="leg">${escapeHtml(e.from || "—")}</span></div>
+             <span class="arrow">→</span>
+             <div><span class="gh-lbl">To</span><span class="leg">${escapeHtml(e.to || "—")}</span></div>
+           </div>`
+        : `<div class="gh-route">
+             <div><span class="gh-lbl">Picked up from</span><span class="leg">${escapeHtml(e.from || "—")}</span>${e.lot ? ` <span style="color:var(--ink-soft); font-weight:400;">Lot ${escapeHtml(e.lot)}</span>` : ""}</div>
+           </div>`;
+      html += `
+        <div class="job-card" data-ghid="${escapeHtml(e.id)}" data-ghkind="${e.kind}">
+          <div class="row1"><div>
+            ${e.subdivision ? `<div class="subdiv">${escapeHtml(e.subdivision)}</div>` : ""}
+            <div class="addr">${escapeHtml(e.kind === "logged" ? (e.to || "(no address)") : (e.from || "(no address)"))}</div>
+          </div></div>
+          <div class="stats">
+            <span class="pill low">🌱 ${e.rolls} big rolls</span>
+            <span class="pill low">${e.pallets} pallets</span>
+            <span class="pill ${e.kind === "logged" ? "" : "photos"}" style="${e.kind === "logged" ? "background:var(--turf); color:#fff;" : ""}">${e.kind === "logged" ? "Logged move" : "Confirmed pickup"}</span>
+            ${aging ? `<span class="pill gh-expiring">Older than ${GH_WINDOW_DAYS} days</span>` : ""}
+          </div>
+          ${route}
+          ${e.notes ? `<div class="hint" style="margin-top:8px;">${escapeHtml(e.notes)}</div>` : ""}
+          <div class="date">${e.who ? "Logged by " + escapeHtml(e.who) + " · " : ""}${e.when ? new Date(e.when).toLocaleDateString(undefined,{month:'short',day:'numeric',year:'numeric'}) : "no date"}</div>
+          <button class="btn btn-danger btn-block" data-ghdel="${escapeHtml(e.id)}" style="margin-top:10px; padding:9px;">Remove from history</button>
+        </div>`;
+    });
+
+    const aged = grassHistoryEntries().filter(e => e.when < ghCutoff()).length;
+    if (ghRange === "30" && aged) html += `<div class="hint" style="text-align:center; margin-top:14px;">${aged} older ${aged===1?"entry has":"entries have"} dropped off after ${GH_WINDOW_DAYS} days. Tap “Everything” to see ${aged===1?"it":"them"} — nothing was deleted.</div>`;
+
+    ghListEl.innerHTML = html;
+    ghListEl.querySelectorAll("[data-ghdel]").forEach(btn => btn.addEventListener("click", (ev) => {
+      ev.stopPropagation();
+      const e = grassHistoryEntries().find(x => x.id === btn.dataset.ghdel);
+      if (e) removeFromHistory(e);
+    }));
+  }
+
+  // A logged move is only a tabulation, so removing it deletes the record.
+  // A confirmed pickup belongs to a real job (photos, completion, invoice), so
+  // removing it only takes it off this screen — the job is left alone.
+  async function removeFromHistory(e){
+    if (e.kind === "logged"){
+      if (!confirm("Delete this logged move for good?\n\n" + (e.from||"—") + " → " + (e.to||"—") + "\n\nIt also comes off the Completed tab. This can't be undone.")) return;
+      try{ await db.collection("jobs").doc(e.id).delete(); }
+      catch(err){ console.error(err); alert("Couldn't delete — check your connection and try again."); return; }
+    } else {
+      if (!confirm("Take this pickup off the grass history?\n\n" + (e.from||"—") + "\n\nThe job itself, its photos and its completion record all stay exactly as they are.")) return;
+      try{ await db.collection("jobs").doc(e.id).update({ grassHistoryHidden: true, updatedAt: Date.now() }); }
+      catch(err){ console.error(err); alert("Couldn't update — check your connection and try again."); return; }
+    }
+    await loadJobs();
+    renderGrassHistory();
+    showToast("Removed from history");
+  }
+
+  document.getElementById("btn-export-grasshistory").addEventListener("click", () => {
+    const rows = [["Type","Date","From","To","Subdivision","Lot #","Big Rolls","Pallets","Logged By","Notes"]];
+    ghVisible().forEach(e => rows.push([
+      e.kind === "logged" ? "Logged move" : "Confirmed pickup",
+      e.when ? new Date(e.when).toLocaleDateString() : "",
+      e.from, e.to, e.subdivision, e.lot, e.rolls, e.pallets, e.who, e.notes
+    ]));
+    downloadCsv("sod-grass-history.csv", rows);
+  });
+
+  // ==================================================
   // BILLED (managers only)
   // A completed job that's been invoiced gets status "billed" plus the invoice
   // number. That takes it off the Completed tab and onto the Billed screen,
@@ -3364,8 +3585,9 @@
     showToast("Moved sod logged ✓");
   });
 
-  // "Moved so far" log on the Move Grass tab, so the driver can see (and undo)
-  // their own entries — they can't see the Completed tab.
+  // The driver's own receipt on the Move Grass tab. Kept to a tally plus the
+  // last few of THEIR loads — the full record lives on the managers' Grass
+  // History screen, so this tab stays about the pickups still to do.
   function renderMovedSoFar(){
     const el = document.getElementById("grass-moved-log");
     if (!el) return;
@@ -3373,7 +3595,8 @@
     if (moves.length === 0){ el.innerHTML = ""; return; }
     const tr = moves.reduce((s,j) => s + (parseInt(j.bigRolls,10)||0), 0);
     const tp = moves.reduce((s,j) => s + (parseInt(j.pallets,10)||0), 0);
-    const recent = moves.slice(0, 20);
+    const mineOnly = moves.filter(j => j.createdByUid && currentUser && j.createdByUid === currentUser.uid);
+    const recent = (can.isManager() ? moves : mineOnly).slice(0, 3);
     el.innerHTML = `
       <div style="margin:22px 0 10px; font-size:13px; font-weight:800; letter-spacing:.04em; text-transform:uppercase; color:var(--ink-soft);">Moved so far</div>
       <div class="measure-total" style="font-size:16px;">Grass moved: ${tr} big rolls · ${tp} pallets</div>
@@ -3396,7 +3619,7 @@
           ${mine ? `<button class="btn btn-danger btn-block" data-undo-move="${j.id}" style="margin-top:10px; padding:9px;">Remove this entry</button>` : ""}
         </div>`;
       }).join("")}
-      ${moves.length > recent.length ? `<div class="hint" style="text-align:center;">Showing the ${recent.length} most recent of ${moves.length}.</div>` : ""}`;
+      ${can.isManager() ? `<div class="hint" style="text-align:center;">Tap “📋 Grass History” above for every load, including confirmed pickups.</div>` : (mineOnly.length > recent.length ? `<div class="hint" style="text-align:center;">Your ${recent.length} most recent of ${mineOnly.length}.</div>` : "")}`;
 
     el.querySelectorAll("[data-undo-move]").forEach(btn => btn.addEventListener("click", async () => {
       if (!confirm("Remove this moved-sod entry? It'll come off the Completed list too.")) return;

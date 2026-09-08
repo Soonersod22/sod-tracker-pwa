@@ -4,7 +4,7 @@
 // sync, but Firestore's own offline cache (enabled in index.html) covers
 // short gaps automatically.
 
-const CACHE_NAME = "sod-tracker-shell-v4";
+const CACHE_NAME = "sod-tracker-shell-v5";
 const SHELL_FILES = [
   "./index.html",
   "./manifest.json",
