@@ -658,6 +658,9 @@
     </div>
     <div class="field"><label>Notes</label><textarea id="f-notes" placeholder="Anything else about this job"></textarea></div>
     <button class="btn btn-primary btn-block" id="btn-save-job">Save Job</button>
+    <div id="save-finish-row" style="margin-top:10px; display:none;">
+      <button class="btn btn-ghost btn-block" id="btn-save-finish-job">✓ Save &amp; Finish Job</button>
+    </div>
     <div id="delete-row" style="margin-top:10px; display:none;">
       <button class="btn btn-danger btn-block" id="btn-delete-job">Delete Job</button>
     </div>
@@ -803,8 +806,8 @@
     </div>
     <div id="finish-grass-fields" style="display:none;">
       <div class="field-row">
-        <div class="field"><label>Big Rolls left</label><input id="finish-rolls" type="number" inputmode="numeric" placeholder="0"></div>
-        <div class="field"><label>Pallets left</label><input id="finish-pallets" type="number" inputmode="numeric" placeholder="0"></div>
+        <div class="field"><label>Big Rolls left</label><input id="finish-rolls" type="number" inputmode="decimal" step="any" min="0" placeholder="0"></div>
+        <div class="field"><label>Pallets left</label><input id="finish-pallets" type="number" inputmode="decimal" step="any" min="0" placeholder="0"></div>
       </div>
     </div>
     <button class="btn btn-primary btn-block" id="btn-finish-complete" disabled>Complete Job</button>
@@ -1237,6 +1240,9 @@
   const SQFT_PER_ROLL = 400, SQFT_PER_PALLET = 500;
   function sqFt(bigRolls, pallets){ return (parseInt(bigRolls,10)||0) * SQFT_PER_ROLL + (parseInt(pallets,10)||0) * SQFT_PER_PALLET; }
   function jobSqFt(j){ return sqFt(j && j.bigRolls, j && j.pallets); }
+  // Leftover grass can be a partial roll/pallet (e.g. 1.5). Rounded to 2 places
+  // so adding decimals never shows float noise like 0.30000000000000004.
+  function qty(v){ return Math.round((parseFloat(v)||0) * 100) / 100; }
   function fmtSqFt(n){ return n.toLocaleString() + " sq ft"; }
   function csvCell(v){
     const s = String(v == null ? "" : v);
@@ -1382,6 +1388,9 @@
     renderPhotoGrid();
     updateFormSqFt();
     document.getElementById("delete-row").style.display = (job && can.isManager()) ? "block" : "none";
+    // "Save & Finish" only makes sense for a job that is (or is about to be) Open.
+    const willBeOpen = job ? jobStatus(job) === "open" : creatingStatus === "open";
+    document.getElementById("save-finish-row").style.display = willBeOpen ? "block" : "none";
     jobSheetBackdrop.classList.add("show");
     jobSheet.classList.add("show");
   }
@@ -1473,7 +1482,12 @@
     e.target.value = "";
   });
 
-  document.getElementById("btn-save-job").addEventListener("click", async () => {
+  document.getElementById("btn-save-job").addEventListener("click", () => saveJob(false));
+  document.getElementById("btn-save-finish-job").addEventListener("click", () => saveJob(true));
+
+  // Saves the job form. An Open job then lands on its detail screen (where
+  // Finish Job lives); "Save & Finish" skips straight to the grass question.
+  async function saveJob(thenFinish){
     const address = document.getElementById("f-address").value.trim();
     if (!address){ document.getElementById("f-address").focus(); return; }
 
@@ -1489,8 +1503,19 @@
       return;
     }
 
+    if (thenFinish && pendingPhotos.some(p => p.uploading)){
+      alert("A photo is still uploading — give it a moment, then try again.");
+      return;
+    }
+
     const saveBtn = document.getElementById("btn-save-job");
-    saveBtn.disabled = true; saveBtn.textContent = "Saving…";
+    const finishBtn = document.getElementById("btn-save-finish-job");
+    saveBtn.disabled = true; finishBtn.disabled = true;
+    (thenFinish ? finishBtn : saveBtn).textContent = "Saving…";
+    const resetSaveBtns = () => {
+      saveBtn.disabled = false; saveBtn.textContent = "Save Job";
+      finishBtn.disabled = false; finishBtn.textContent = "✓ Save & Finish Job";
+    };
 
     const existing = jobsCache.find(j => j.id === jobId);
     const job = {
@@ -1524,14 +1549,16 @@
       await db.collection("jobs").doc(jobId).set(job);
     }catch(err){
       console.error(err);
-      saveBtn.disabled = false; saveBtn.textContent = "Save Job";
+      resetSaveBtns();
       alert("Couldn't save — check your connection and try again.");
       return;
     }
-    saveBtn.disabled = false; saveBtn.textContent = "Save Job";
+    resetSaveBtns();
     closeJobSheet();
-    loadJobs();
-  });
+    await loadJobs();
+    if (jobStatus(job) !== "open") return;
+    if (thenFinish) openFinishSheet(job); else openJobDetail(job);
+  }
 
   document.getElementById("btn-delete-job").addEventListener("click", async () => {
     if (!editingJobId) return;
@@ -1605,8 +1632,8 @@
     if (currentJobFilter === "completed"){
       const pend = filtered.filter(j => j.grassLeft && !j.grassMoved);
       if (pend.length){
-        const gr = pend.reduce((s,j) => s + (parseInt(j.leftBigRolls,10)||0), 0);
-        const gp = pend.reduce((s,j) => s + (parseInt(j.leftPallets,10)||0), 0);
+        const gr = qty(pend.reduce((s,j) => s + qty(j.leftBigRolls), 0));
+        const gp = qty(pend.reduce((s,j) => s + qty(j.leftPallets), 0));
         grassBanner = `<div style="background:var(--warn-light); color:var(--warn); border:1px solid #E9C2A6; border-radius:11px; padding:11px 14px; margin-bottom:12px; font-size:14px; font-weight:700;">🌱 Grass still on job sites: ${gr} big rolls · ${gp} pallets</div>`;
       }
     }
@@ -3058,8 +3085,8 @@
       completedAt: Date.now(),
       completedByName: actorLabel(),
       grassLeft: grassLeft,
-      leftBigRolls: grassLeft ? (parseInt(document.getElementById("finish-rolls").value,10)||0) : 0,
-      leftPallets: grassLeft ? (parseInt(document.getElementById("finish-pallets").value,10)||0) : 0,
+      leftBigRolls: grassLeft ? Math.max(0, qty(document.getElementById("finish-rolls").value)) : 0,
+      leftPallets: grassLeft ? Math.max(0, qty(document.getElementById("finish-pallets").value)) : 0,
       grassMoved: false,
       grassMovedByName: "",
       grassNotes: "",
@@ -3083,8 +3110,8 @@
     const jobs = grassPending().slice().sort((a,b) => (a.completedAt||0) - (b.completedAt||0));
     const tallyEl = document.getElementById("grass-tally");
     if (tallyEl){
-      const tr = jobs.reduce((s,j) => s + (parseInt(j.leftBigRolls,10)||0), 0);
-      const tp = jobs.reduce((s,j) => s + (parseInt(j.leftPallets,10)||0), 0);
+      const tr = qty(jobs.reduce((s,j) => s + qty(j.leftBigRolls), 0));
+      const tp = qty(jobs.reduce((s,j) => s + qty(j.leftPallets), 0));
       tallyEl.innerHTML = jobs.length ? `<div class="measure-total" style="font-size:16px;">Grass to move: ${tr} big rolls · ${tp} pallets</div>` : "";
     }
     if (jobs.length === 0){
@@ -3158,7 +3185,7 @@
         out.push({
           id: j.id, kind: "pickup", job: j,
           from: j.address || "", to: "",
-          rolls: parseInt(j.leftBigRolls,10)||0, pallets: parseInt(j.leftPallets,10)||0,
+          rolls: qty(j.leftBigRolls), pallets: qty(j.leftPallets),
           who: j.grassMovedByName || "", when: j.grassMovedAt || j.completedAt || 0,
           notes: j.grassNotes || "",
           subdivision: j.subdivision || "", lot: j.lot || ""
@@ -3212,8 +3239,8 @@
     const rows = ghVisible();
     const totalAll = grassHistoryEntries().length;
 
-    const tr = rows.reduce((s,e) => s + e.rolls, 0);
-    const tp = rows.reduce((s,e) => s + e.pallets, 0);
+    const tr = qty(rows.reduce((s,e) => s + e.rolls, 0));
+    const tp = qty(rows.reduce((s,e) => s + e.pallets, 0));
     document.getElementById("gh-totals").innerHTML = `
       <div style="display:flex; gap:8px; margin-bottom:12px;">
         <div class="stat-box" style="flex:1; text-align:center;"><div class="num">${rows.length}</div><div class="lbl">Loads</div></div>
