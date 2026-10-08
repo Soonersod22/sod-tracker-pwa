@@ -507,8 +507,8 @@
           <input id="drop-hood" placeholder="e.g. Selah Meadows">
         </div>
         <div class="quick-row">
-          <div class="field"><label>Big Rolls</label><input id="drop-rolls" type="number" inputmode="numeric" placeholder="0"></div>
-          <div class="field"><label>Pallets</label><input id="drop-pallets" type="number" inputmode="numeric" placeholder="0"></div>
+          <div class="field"><label>Big Rolls</label><input id="drop-rolls" type="number" inputmode="decimal" step="any" placeholder="0"></div>
+          <div class="field"><label>Pallets</label><input id="drop-pallets" type="number" inputmode="decimal" step="any" placeholder="0"></div>
         </div>
         <div class="field" style="margin-bottom:12px;">
           <label>Note (optional)</label>
@@ -633,8 +633,8 @@
     <div class="field"><label>Address *</label><input id="f-address" placeholder="123 Oak St"></div>
     <div class="field-row"><div class="field"><label>Lot #</label><input id="f-lot" placeholder="Optional"></div></div>
     <div class="field-row">
-      <div class="field"><label>Big Rolls</label><input id="f-rolls" type="number" inputmode="numeric" placeholder="0"></div>
-      <div class="field"><label>Pallets</label><input id="f-pallets" type="number" inputmode="numeric" placeholder="0"></div>
+      <div class="field"><label>Big Rolls</label><input id="f-rolls" type="number" inputmode="decimal" step="any" placeholder="0"></div>
+      <div class="field"><label>Pallets</label><input id="f-pallets" type="number" inputmode="decimal" step="any" placeholder="0"></div>
     </div>
     <div class="field" style="margin-top:-6px;">
       <div id="f-sqft" style="background:var(--turf-light); color:var(--turf); border-radius:10px; padding:11px 13px; font-weight:700; font-size:15px; text-align:center;">0 sq ft</div>
@@ -709,8 +709,8 @@
       <datalist id="pt-cat-options"></datalist>
     </div>
     <div class="field-row">
-      <div class="field"><label>Quantity on hand</label><input id="pt-qty" type="number" inputmode="numeric" placeholder="0"></div>
-      <div class="field"><label>Low-stock at</label><input id="pt-low" type="number" inputmode="numeric" placeholder="e.g. 4"></div>
+      <div class="field"><label>Quantity on hand</label><input id="pt-qty" type="number" inputmode="decimal" step="any" placeholder="0"></div>
+      <div class="field"><label>Low-stock at</label><input id="pt-low" type="number" inputmode="decimal" step="any" placeholder="e.g. 4"></div>
     </div>
     <div class="field"><label>Location / bin</label><input id="pt-location" placeholder="e.g. Rack B3 (optional)"></div>
     <div class="field"><label>Part # / notes</label><input id="pt-notes" placeholder="Optional"></div>
@@ -758,8 +758,8 @@
     <div class="field"><label>Date</label><input id="sv-date" type="date"></div>
     <div class="field"><label>What was done *</label><textarea id="sv-desc" placeholder="e.g. Oil change + replaced front tires"></textarea></div>
     <div class="field-row">
-      <div class="field"><label>Meter (mi / hrs)</label><input id="sv-meter" type="number" inputmode="numeric" placeholder="e.g. 84300"></div>
-      <div class="field"><label>Cost ($)</label><input id="sv-cost" type="number" inputmode="decimal" placeholder="0"></div>
+      <div class="field"><label>Meter (mi / hrs)</label><input id="sv-meter" type="number" inputmode="decimal" step="any" placeholder="e.g. 84300"></div>
+      <div class="field"><label>Cost ($)</label><input id="sv-cost" type="number" inputmode="decimal" step="any" placeholder="0"></div>
     </div>
     <div class="field"><label>Parts used</label><input id="sv-parts" placeholder="e.g. 2× 11R22.5 tires (optional)"></div>
     <div class="field"><label>Notes</label><input id="sv-notes" placeholder="Optional"></div>
@@ -840,8 +840,8 @@
     <div class="field"><label>Lot #</label><input id="ms-lot" placeholder="Optional"></div>
     <div class="field"><label>Where it came from</label><input id="ms-from" placeholder="e.g. Farm, Selah Meadows Lot 4, back lot"></div>
     <div class="field-row">
-      <div class="field"><label>Big Rolls</label><input id="ms-rolls" type="number" inputmode="numeric" placeholder="0"></div>
-      <div class="field"><label>Pallets</label><input id="ms-pallets" type="number" inputmode="numeric" placeholder="0"></div>
+      <div class="field"><label>Big Rolls</label><input id="ms-rolls" type="number" inputmode="decimal" step="any" placeholder="0"></div>
+      <div class="field"><label>Pallets</label><input id="ms-pallets" type="number" inputmode="decimal" step="any" placeholder="0"></div>
     </div>
     <div class="field"><label>Date moved</label><input id="ms-date" type="date"></div>
     <div class="field"><label>Notes</label><textarea id="ms-notes" placeholder="Anything worth noting about this load (optional)"></textarea></div>
@@ -874,7 +874,7 @@
       <div class="field"><label>Unit #</label><input id="mr-unit" placeholder="e.g. 12 or EQ-7"></div>
     </div>
     <div class="field"><label>Last 4 of VIN / serial #</label><input id="mr-vin" maxlength="8" placeholder="e.g. 4821 (optional)"></div>
-    <div class="field"><label>Meter reading (miles / hours)</label><input id="mr-meter" type="number" inputmode="numeric" placeholder="Optional"></div>
+    <div class="field"><label>Meter reading (miles / hours)</label><input id="mr-meter" type="number" inputmode="decimal" step="any" placeholder="Optional"></div>
 
     <div class="field">
       <label>How bad is it? *</label>
@@ -912,7 +912,7 @@
     <div class="field"><label>Neighborhood *</label><input id="gr-hood" placeholder="e.g. Selah Meadows"></div>
     <div class="field"><label>Address</label><input id="gr-address" placeholder="123 Oak St (address and/or lot #)"></div>
     <div class="field"><label>Lot #</label><input id="gr-lot" placeholder="Optional"></div>
-    <div class="field"><label>Loads of topsoil</label><input id="gr-topsoil" type="number" inputmode="numeric" placeholder="Optional — # of loads for this lot"></div>
+    <div class="field"><label>Loads of topsoil</label><input id="gr-topsoil" type="number" inputmode="decimal" step="any" placeholder="Optional — # of loads for this lot"></div>
     <div class="field">
       <label>Verification Photos *</label>
       <div class="photo-grid" id="grade-photo-grid">
@@ -1238,7 +1238,7 @@
   function jobStatus(j){ return isBilled(j) ? "billed" : (isCompleted(j) ? "completed" : (isUpcoming(j) ? "upcoming" : (isMeasured(j) ? "measured" : "open"))); }
   // Square footage: 1 big roll = 400 sq ft, 1 pallet = 500 sq ft. (Change here if these ever change.)
   const SQFT_PER_ROLL = 400, SQFT_PER_PALLET = 500;
-  function sqFt(bigRolls, pallets){ return (parseInt(bigRolls,10)||0) * SQFT_PER_ROLL + (parseInt(pallets,10)||0) * SQFT_PER_PALLET; }
+  function sqFt(bigRolls, pallets){ return qty(qty(bigRolls) * SQFT_PER_ROLL + qty(pallets) * SQFT_PER_PALLET); }
   function jobSqFt(j){ return sqFt(j && j.bigRolls, j && j.pallets); }
   // Leftover grass can be a partial roll/pallet (e.g. 1.5). Rounded to 2 places
   // so adding decimals never shows float noise like 0.30000000000000004.
@@ -1624,8 +1624,8 @@
     const totalBanner = `<div style="background:var(--card); border:1px solid var(--line); border-radius:11px; padding:11px 14px; margin-bottom:12px; font-size:14px; font-weight:650; box-shadow:var(--shadow);">Total ${currentJobFilter} ${measuredMode?"area":"work"}: <span style="color:var(--turf); font-weight:750;">${fmtSqFt(Math.round(totalSqFt))}</span> <span style="color:var(--ink-soft); font-weight:600;">· ${installOnly.length} ${measuredMode?"yard":"job"}${installOnly.length===1?"":"s"}</span></div>`;
     let moveBanner = "";
     if (moveRecords.length){
-      const mr = moveRecords.reduce((s,j) => s + (parseInt(j.bigRolls,10)||0), 0);
-      const mp = moveRecords.reduce((s,j) => s + (parseInt(j.pallets,10)||0), 0);
+      const mr = qty(moveRecords.reduce((s,j) => s + qty(j.bigRolls), 0));
+      const mp = qty(moveRecords.reduce((s,j) => s + qty(j.pallets), 0));
       moveBanner = `<div style="background:var(--turf-light); color:var(--turf); border:1px solid #C6DCC2; border-radius:11px; padding:11px 14px; margin-bottom:12px; font-size:14px; font-weight:700;">🌱 Moved grass (tracked separately): ${mr} big rolls · ${mp} pallets <span style="font-weight:600; opacity:.8;">· ${moveRecords.length} load${moveRecords.length===1?"":"s"}</span></div>`;
     }
     let grassBanner = "";
@@ -2344,8 +2344,8 @@
       id: partId,
       name,
       category: document.getElementById("pt-category").value.trim(),
-      quantity: parseInt(document.getElementById("pt-qty").value, 10) || 0,
-      lowStock: parseInt(document.getElementById("pt-low").value, 10) || 0,
+      quantity: Math.max(0, qty(document.getElementById("pt-qty").value)),
+      lowStock: Math.max(0, qty(document.getElementById("pt-low").value)),
       location: document.getElementById("pt-location").value.trim(),
       notes: document.getElementById("pt-notes").value.trim(),
       pendingDelete: existing ? (existing.pendingDelete || false) : false,
@@ -2388,7 +2388,7 @@
   async function adjustPartQty(partId, delta){
     const part = partsCache.find(p => p.id === partId);
     if (!part) return;
-    const newQty = Math.max(0, (parseInt(part.quantity, 10) || 0) + delta);
+    const newQty = Math.max(0, qty(qty(part.quantity) + delta));
     part.quantity = newQty; // optimistic update
     renderPartList();
     try{
@@ -2411,10 +2411,10 @@
     renderPartList();
   }
 
-  function isLowStock(p){ const low = parseInt(p.lowStock, 10) || 0; return low > 0 && (parseInt(p.quantity, 10) || 0) <= low; }
+  function isLowStock(p){ const low = qty(p.lowStock); return low > 0 && qty(p.quantity) <= low; }
 
   function partCardHtml(p){
-    const qty = parseInt(p.quantity, 10) || 0;
+    const qty = Math.round((parseFloat(p.quantity)||0) * 100) / 100;
     const low = isLowStock(p);
     return `
       <div class="part-card${low ? " low" : ""}" data-id="${p.id}">
@@ -2443,7 +2443,7 @@
   }
   function sortParts(arr){
     return arr.slice().sort((a,b) => partSort === "qty"
-      ? ((parseInt(a.quantity,10)||0) - (parseInt(b.quantity,10)||0))
+      ? (qty(a.quantity) - qty(b.quantity))
       : (a.name||"").toLowerCase().localeCompare((b.name||"").toLowerCase()));
   }
   function partsIn(folder){
@@ -2540,7 +2540,7 @@
 
   document.getElementById("btn-export-parts").addEventListener("click", () => {
     const rows = [["Name","Category","Quantity","Low-stock at","Location","Part #/Notes"]];
-    partsCache.forEach(p => rows.push([p.name, p.category||"", parseInt(p.quantity,10)||0, parseInt(p.lowStock,10)||0, p.location||"", p.notes||""]));
+    partsCache.forEach(p => rows.push([p.name, p.category||"", qty(p.quantity), qty(p.lowStock), p.location||"", p.notes||""]));
     downloadCsv("shop-parts-inventory.csv", rows);
   });
 
@@ -2918,9 +2918,9 @@
     const labB = type === "rect" ? "Width" : "Height";
     row.innerHTML = `
       <span class="mr-type" title="${type === "rect" ? "Rectangle" : "Triangle"}">${type === "rect" ? "▭" : "◺"}</span>
-      <input type="number" inputmode="decimal" class="mr-a" placeholder="${labA}" value="${a!=null?a:""}">
+      <input type="number" inputmode="decimal" step="any" class="mr-a" placeholder="${labA}" value="${a!=null?a:""}">
       <span class="mr-x">×</span>
-      <input type="number" inputmode="decimal" class="mr-b" placeholder="${labB}" value="${b!=null?b:""}">
+      <input type="number" inputmode="decimal" step="any" class="mr-b" placeholder="${labB}" value="${b!=null?b:""}">
       <span class="mr-area">0</span>
       <button type="button" class="mr-del" title="Remove">✕</button>`;
     measureRowsEl.appendChild(row);
@@ -3176,7 +3176,7 @@
         out.push({
           id: j.id, kind: "logged", job: j,
           from: j.movedFrom || "", to: j.address || "",
-          rolls: parseInt(j.bigRolls,10)||0, pallets: parseInt(j.pallets,10)||0,
+          rolls: qty(j.bigRolls), pallets: qty(j.pallets),
           who: j.createdByName || "", when: j.completedAt || j.createdAt || 0,
           notes: j.notes || "",
           subdivision: j.subdivision || "", lot: j.lot || ""
@@ -3570,8 +3570,8 @@
   document.getElementById("btn-save-movedsod").addEventListener("click", async () => {
     const address = document.getElementById("ms-address").value.trim();
     if (!address){ document.getElementById("ms-address").focus(); alert("Please enter where the grass went."); return; }
-    const rolls = parseInt(document.getElementById("ms-rolls").value,10)||0;
-    const pallets = parseInt(document.getElementById("ms-pallets").value,10)||0;
+    const rolls = Math.max(0, qty(document.getElementById("ms-rolls").value));
+    const pallets = Math.max(0, qty(document.getElementById("ms-pallets").value));
     if (rolls === 0 && pallets === 0){ alert("Enter how many big rolls or pallets you moved."); return; }
 
     const btn = document.getElementById("btn-save-movedsod");
@@ -3620,8 +3620,8 @@
     if (!el) return;
     const moves = jobsCache.filter(isGrassMove).slice().sort((a,b) => (b.completedAt||0) - (a.completedAt||0));
     if (moves.length === 0){ el.innerHTML = ""; return; }
-    const tr = moves.reduce((s,j) => s + (parseInt(j.bigRolls,10)||0), 0);
-    const tp = moves.reduce((s,j) => s + (parseInt(j.pallets,10)||0), 0);
+    const tr = qty(moves.reduce((s,j) => s + qty(j.bigRolls), 0));
+    const tp = qty(moves.reduce((s,j) => s + qty(j.pallets), 0));
     const mineOnly = moves.filter(j => j.createdByUid && currentUser && j.createdByUid === currentUser.uid);
     const recent = (can.isManager() ? moves : mineOnly).slice(0, 3);
     el.innerHTML = `
@@ -3754,7 +3754,7 @@
       subdivision: hood,
       address: document.getElementById("gr-address").value.trim(),
       lot: document.getElementById("gr-lot").value.trim(),
-      topsoilLoads: parseInt(document.getElementById("gr-topsoil").value, 10) || 0,
+      topsoilLoads: Math.max(0, qty(document.getElementById("gr-topsoil").value)),
       photos: photos,
       createdByName: existing ? (existing.createdByName||actorLabel()) : actorLabel(),
       createdAt: existing ? existing.createdAt : Date.now(),
